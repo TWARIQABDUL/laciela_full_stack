@@ -13,14 +13,14 @@ function Navbar() {
   };
 
   const navLinks = [
-    { name: "Home", path: "/" },
-    { name: "Bar", path: "/bar" },
-    { name: "Kitchen", path: "/kitchen" },
-    { name: "Guest House", path: "/guesthouse" },
-    { name: "Gym", path: "/gym" },
-    { name: "Billiard", path: "/billiard" },
-    { name: "Expenses", path: "/expenses" },
-    { name: "Staff", path: "/credits" },
+    { name: "Home", path: "/", allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "BAR_MAN", "CHIEF_KITCHEN", "TOKEN_MAN", "LAND_LORD", "GYM"] },
+    { name: "Bar", path: "/bar", allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "BAR_MAN"] },
+    { name: "Kitchen", path: "/kitchen", allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CHIEF_KITCHEN"] },
+    { name: "Guest House", path: "/guesthouse", allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "LAND_LORD"] },
+    { name: "Gym", path: "/gym", allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "GYM"] },
+    { name: "Billiard", path: "/billiard", allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "TOKEN_MAN"] },
+    { name: "Expenses", path: "/expenses", allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
+    { name: "Staff", path: "/credits", allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
   ];
 
   return (
@@ -46,7 +46,14 @@ function Navbar() {
           <div className="collapse navbar-collapse show">
             <ul className="navbar-nav ms-auto align-items-center">
 
-              {navLinks.map((item, index) => (
+              {navLinks
+                .filter(item => {
+                  // If not authenticated, hide all restricted tabs
+                  if (!isAuthenticated || !user) return false;
+                  // If the user's role is in the allowedRoles array, show the link
+                  return item.allowedRoles.includes(user.role);
+                })
+                .map((item, index) => (
                 <li className="nav-item mx-2" key={index}>
                   <Link className="elite-link" to={item.path}>
                     {item.name}
