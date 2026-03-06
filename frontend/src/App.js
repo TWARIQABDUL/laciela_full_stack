@@ -16,26 +16,33 @@ import Billiard from "./component/pages/Billiard";
 import Expenses from "./component/pages/Expenses";
 import Credits from "./component/pages/Credits"; // Employees/Credits page
 import EmployeeLoans from "./component/pages/EmployeeLoans"; // ✅ Employee Loans page
+import Login from "./component/pages/Login";
+import ProtectedRoute from "./component/ProtectedRoute";
+import { AuthProvider } from "./context/AuthContext";
 
 function App() {
   return (
-    <Router>
-      {/* ===== Navbar ===== */}
-      <Navbar />
-
-      {/* ===== Main Routes ===== */}
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/Bar" element={<Bar />} />
-        <Route path="/Kitchen" element={<Kitchen />} />
-        <Route path="/GuestHouse" element={<GuestHouse />} />
-        <Route path="/GYM" element={<GYM />} />
-        <Route path="/Billiard" element={<Billiard />} />
-        <Route path="/Expenses" element={<Expenses />} />
-        <Route path="/credits" element={<Credits />} /> {/* Employees/Credits */}
-        <Route path="/employees/:id/loans" element={<EmployeeLoans />} /> {/* Employee Loans */}
-      </Routes>
-    </Router>
+    <AuthProvider>
+      <Router>
+        {/* ===== Main Routes ===== */}
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          
+          {/* Protected Routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/" element={<><Navbar /><Home /></>} />
+            <Route path="/Bar" element={<><Navbar /><Bar /></>} />
+            <Route path="/Kitchen" element={<><Navbar /><Kitchen /></>} />
+            <Route path="/GuestHouse" element={<><Navbar /><GuestHouse /></>} />
+            <Route path="/GYM" element={<><Navbar /><GYM /></>} />
+            <Route path="/Billiard" element={<><Navbar /><Billiard /></>} />
+            <Route path="/Expenses" element={<><Navbar /><Expenses /></>} />
+            <Route path="/credits" element={<><Navbar /><Credits /></>} /> {/* Employees/Credits */}
+            <Route path="/employees/:id/loans" element={<><Navbar /><EmployeeLoans /></>} /> {/* Employee Loans */}
+          </Route>
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }
 

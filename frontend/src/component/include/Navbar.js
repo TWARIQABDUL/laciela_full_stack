@@ -1,10 +1,16 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
-import Login from "../login/Login";
+import React, { useContext } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { AuthContext } from "../../context/AuthContext";
 import logo from "../assets/logo.png";
 
 function Navbar() {
-  const [showLogin, setShowLogin] = useState(false);
+  const { user, logout, isAuthenticated } = useContext(AuthContext);
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login");
+  };
 
   const navLinks = [
     { name: "Home", path: "/" },
@@ -48,23 +54,37 @@ function Navbar() {
                 </li>
               ))}
 
-              {/* Login Button */}
-              <li className="nav-item mx-2">
-                <button
-                  className="elite-link fw-bold"
-                  onClick={() => setShowLogin(true)}
-                  style={{ background: "transparent" }}
-                >
-                  Login
-                </button>
-              </li>
+              {/* User Info / Logout */}
+              {isAuthenticated ? (
+                <>
+                  <li className="nav-item mx-2 text-warning d-flex align-items-center fw-bold">
+                    Hello, {user?.username} ({user?.role})
+                  </li>
+                  <li className="nav-item mx-2">
+                    <button
+                      className="elite-link fw-bold"
+                      onClick={handleLogout}
+                      style={{ background: "transparent" }}
+                    >
+                      Logout
+                    </button>
+                  </li>
+                </>
+              ) : (
+                <li className="nav-item mx-2">
+                  <Link
+                    to="/login"
+                    className="elite-link fw-bold"
+                  >
+                    Login
+                  </Link>
+                </li>
+              )}
             </ul>
           </div>
         </div>
       </nav>
 
-      {/* Login Modal */}
-      <Login show={showLogin} handleClose={() => setShowLogin(false)} />
 
       {/* Button Style */}
       <style>

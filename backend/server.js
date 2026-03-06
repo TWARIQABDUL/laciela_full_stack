@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 
 // ================= ROUTES =================
+const authRoutes = require("./routes/auth");
 const barRoutes = require("./routes/bar");
 const kitchenRoutes = require("./routes/kitchen");
 const expensesRoutes = require("./routes/expenses");
@@ -24,8 +25,11 @@ app.use(cors({
 }));
 
 app.use(express.json());
+const cookieParser = require("cookie-parser");
+app.use(cookieParser());
 
 // ================= ROUTES =================
+app.use("/api/auth", authRoutes);
 app.use("/api/drinks", barRoutes);
 app.use("/api/kitchen", kitchenRoutes);
 app.use("/api/expenses", expensesRoutes);
