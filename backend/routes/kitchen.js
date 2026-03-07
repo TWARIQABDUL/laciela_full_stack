@@ -1,25 +1,31 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
-
+const authenticateUser = require("../middleware/auth");
 
 // ==================================================
 // GET ALL PRODUCTS BY DATE
 // ==================================================
-router.get("/", (req, res) => {
+router.get("/", authenticateUser, (req, res) => {
   const { date } = req.query;
+  const userRole = req.user.role;
+  const userBranchId = req.user.branchId;
 
   if (!date) {
     return res.status(400).json({ message: "Date is required" });
   }
 
-  const sql = `
-    SELECT * FROM kitchen_products
-    WHERE date = ?
-    ORDER BY id DESC
-  `;
+  let sql = `SELECT * FROM kitchen_products WHERE date = ?`;
+  let params = [date];
+  
+  if (userRole !== "SUPER_ADMIN") {
+    sql += ` AND branch_id = ?`;
+    params.push(userBranchId);
+  }
+  
+  sql += ` ORDER BY id DESC`;
 
-  db.query(sql, [date], (err, rows) => {
+  db.query(sql, params, (err, rows) => {
     if (err) {
       console.error("Fetch error:", err);
       return res.status(500).json(err);
@@ -64,12 +70,12 @@ router.get("/", (req, res) => {
   });
 });
 
-
 // ==================================================
 // ADD NEW FOOD
 // ==================================================
-router.post("/", (req, res) => {
+router.post("/", authenticateUser, (req, res) => {
   const { name, initial_price, price, opening_stock, date } = req.body;
+  const userBranchId = req.user.branchId;
 
   if (!name || !date) {
     return res.status(400).json({
@@ -79,8 +85,8 @@ router.post("/", (req, res) => {
 
   const sql = `
     INSERT INTO kitchen_products
-    (name, initial_price, price, opening_stock, entree, sold, date)
-    VALUES (?, ?, ?, ?, 0, 0, ?)
+    (name, initial_price, price, opening_stock, entree, sold, date, branch_id)
+    VALUES (?, ?, ?, ?, 0, 0, ?, ?)
   `;
 
   db.query(
@@ -91,6 +97,7 @@ router.post("/", (req, res) => {
       Number(price) || 0,
       Number(opening_stock) || 0,
       date,
+      userBranchId
     ],
     (err, result) => {
       if (err) {
@@ -106,13 +113,14 @@ router.post("/", (req, res) => {
   );
 });
 
-
 // ==================================================
 // UPDATE ENTREE
 // ==================================================
-router.put("/entree/:id", (req, res) => {
+router.put("/entree/:id", authenticateUser, (req, res) => {
   const { entree, date } = req.body;
   const { id } = req.params;
+  const userRole = req.user.role;
+  const userBranchId = req.user.branchId;
 
   if (entree == null || !date) {
     return res.status(400).json({
@@ -120,13 +128,15 @@ router.put("/entree/:id", (req, res) => {
     });
   }
 
-  const sql = `
-    UPDATE kitchen_products
-    SET entree = ?
-    WHERE id = ? AND date = ?
-  `;
+  let sql = `UPDATE kitchen_products SET entree = ? WHERE id = ? AND date = ?`;
+  let params = [Number(entree), id, date];
 
-  db.query(sql, [Number(entree), id, date], (err) => {
+  if (userRole !== "SUPER_ADMIN") {
+    sql += ` AND branch_id = ?`;
+    params.push(userBranchId);
+  }
+
+  db.query(sql, params, (err) => {
     if (err) {
       console.error("Entree update error:", err);
       return res.status(500).json(err);
@@ -136,13 +146,14 @@ router.put("/entree/:id", (req, res) => {
   });
 });
 
-
 // ==================================================
 // UPDATE SOLD
 // ==================================================
-router.put("/sold/:id", (req, res) => {
+router.put("/sold/:id", authenticateUser, (req, res) => {
   const { sold, date } = req.body;
   const { id } = req.params;
+  const userRole = req.user.role;
+  const userBranchId = req.user.branchId;
 
   if (sold == null || !date) {
     return res.status(400).json({
@@ -150,13 +161,15 @@ router.put("/sold/:id", (req, res) => {
     });
   }
 
-  const sql = `
-    UPDATE kitchen_products
-    SET sold = ?
-    WHERE id = ? AND date = ?
-  `;
+  let sql = `UPDATE kitchen_products SET sold = ? WHERE id = ? AND date = ?`;
+  let params = [Number(sold), id, date];
 
-  db.query(sql, [Number(sold), id, date], (err) => {
+  if (userRole !== "SUPER_ADMIN") {
+    sql += ` AND branch_id = ?`;
+    params.push(userBranchId);
+  }
+
+  db.query(sql, params, (err) => {
     if (err) {
       console.error("Sold update error:", err);
       return res.status(500).json(err);

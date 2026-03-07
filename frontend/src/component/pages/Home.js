@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
@@ -9,9 +9,11 @@ import {
   FaBed,
   FaMoneyBillWave,
 } from "react-icons/fa";
+import { AuthContext } from "../../context/AuthContext";
 
 function Home() {
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useContext(AuthContext);
 
   const [totals, setTotals] = useState({
     drinks: 0,
@@ -51,13 +53,26 @@ function Home() {
   };
 
   const pages = [
-    { name: "Drinks", key: "drinks", route: "/bar", icon: <FaGlassMartiniAlt size={40} /> },
-    { name: "Kitchen", key: "kitchen", route: "/kitchen", icon: <FaUtensils size={40} /> },
-    { name: "Billiard", key: "billiard", route: "/billiard", icon: <FaTableTennis size={40} /> },
-    { name: "Gym", key: "gym", route: "/gym", icon: <FaDumbbell size={40} /> },
-    { name: "Guest House", key: "guesthouse", route: "/guesthouse", icon: <FaBed size={40} /> },
-    { name: "Expenses", key: "expenses", route: "/expenses", icon: <FaMoneyBillWave size={40} /> },
+    { name: "Drinks", key: "drinks", route: "/bar", icon: <FaGlassMartiniAlt size={40} />, allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "BAR_MAN"] },
+    { name: "Kitchen", key: "kitchen", route: "/kitchen", icon: <FaUtensils size={40} />, allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CHIEF_KITCHEN"] },
+    { name: "Billiard", key: "billiard", route: "/billiard", icon: <FaTableTennis size={40} />, allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "TOKEN_MAN"] },
+    { name: "Gym", key: "gym", route: "/gym", icon: <FaDumbbell size={40} />, allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "GYM"] },
+    { name: "Guest House", key: "guesthouse", route: "/guesthouse", icon: <FaBed size={40} />, allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "LAND_LORD"] },
+    { name: "Expenses", key: "expenses", route: "/expenses", icon: <FaMoneyBillWave size={40} />, allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
   ];
+
+  // Filter accessible pages
+  const visiblePages = pages.filter(page => {
+    if (!isAuthenticated || !user) return false;
+    return page.allowedRoles.includes(user.role);
+  });
+
+  // Calculate sum of only what is visible to the user as their "Total"
+  const visibleGrandTotal = visiblePages
+    .filter(p => p.key !== "expenses")
+    .reduce((sum, page) => sum + (totals[page.key] || 0), 0);
+
+  const isManagerOrAdmin = user && ["SUPER_ADMIN", "ADMIN", "MANAGER"].includes(user.role);
 
   return (
     <div
@@ -70,14 +85,14 @@ function Home() {
       <div className="text-center mb-5">
         <h1 className="fw-bold text-dark">La Cielo GARDEN</h1>
         <p className="text-muted fs-5">
-          Overview of all sections and profits
+          Overview of accessible sections and profits
         </p>
       </div>
 
       {/* SECTION CARDS */}
       <div className="container">
-        <div className="row g-4">
-          {pages.map((page) => (
+        <div className="row g-4 justify-content-center">
+          {visiblePages.map((page) => (
             <div key={page.key} className="col-12 col-md-4">
               <div
                 className="card h-100 p-4 text-center border-0"
@@ -111,23 +126,25 @@ function Home() {
         </div>
 
         {/* GRAND TOTAL */}
-        <div className="mt-5">
-          <div
-            className="card p-5 text-center border-0"
-            style={{
-              borderRadius: "22px",
-              background: "#ffffff",
-              boxShadow: "0 15px 40px rgba(0,0,0,0.1)",
-            }}
-          >
-            <h3 className="fw-bold text-dark">
-              Total Profit (Expenses Excluded)
-            </h3>
-            <h1 className="display-4 fw-bold mt-3 text-dark">
-              {totals.grandTotal.toLocaleString()} RWF
-            </h1>
+        {isManagerOrAdmin && (
+          <div className="mt-5">
+            <div
+              className="card p-5 text-center border-0"
+              style={{
+                borderRadius: "22px",
+                background: "#ffffff",
+                boxShadow: "0 15px 40px rgba(0,0,0,0.1)",
+              }}
+            >
+              <h3 className="fw-bold text-dark">
+                Total Profit (Expenses Excluded)
+              </h3>
+              <h1 className="display-4 fw-bold mt-3 text-dark">
+                {visibleGrandTotal.toLocaleString()} RWF
+              </h1>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

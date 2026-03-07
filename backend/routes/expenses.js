@@ -1,12 +1,24 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
+const authenticateUser = require("../middleware/auth");
 
 // ================= GET ALL EXPENSES =================
-router.get("/", (req, res) => {
-  const sql = "SELECT * FROM expenses ORDER BY date DESC, id DESC";
+router.get("/", authenticateUser, (req, res) => {
+  const userRole = req.user.role;
+  const userBranchId = req.user.branchId;
 
-  db.query(sql, (err, rows) => {
+  let sql = "SELECT * FROM expenses";
+  let params = [];
+
+  if (userRole !== "SUPER_ADMIN") {
+    sql += " WHERE branch_id = ?";
+    params.push(userBranchId);
+  }
+
+  sql += " ORDER BY date DESC, id DESC";
+
+  db.query(sql, params, (err, rows) => {
     if (err) return res.status(500).json(err);
 
     // Calculate totals for dashboard cards
@@ -32,8 +44,9 @@ router.get("/", (req, res) => {
 });
 
 // ================= ADD EXPENSE =================
-router.post("/", (req, res) => {
+router.post("/", authenticateUser, (req, res) => {
   const { expense_name, amount, cost, date, category, is_profit } = req.body;
+  const userBranchId = req.user.branchId;
 
   if (!expense_name || !date || !category || is_profit === undefined) {
     return res.status(400).json({ message: "Required fields missing" });
@@ -41,8 +54,8 @@ router.post("/", (req, res) => {
 
   const sql = `
     INSERT INTO expenses 
-    (expense_name, amount, cost, date, category, is_profit)
-    VALUES (?, ?, ?, ?, ?, ?)
+    (expense_name, amount, cost, date, category, is_profit, branch_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `;
 
   db.query(
@@ -53,7 +66,8 @@ router.post("/", (req, res) => {
       Number(cost || 0),
       date,
       category,
-      Number(is_profit)
+      Number(is_profit),
+      userBranchId
     ],
     (err, result) => {
       if (err) return res.status(500).json(err);
@@ -72,28 +86,33 @@ router.post("/", (req, res) => {
 });
 
 // ================= UPDATE EXPENSE =================
-router.put("/:id", (req, res) => {
+router.put("/:id", authenticateUser, (req, res) => {
   const { expense_name, amount, cost, date, category, is_profit } = req.body;
   const { id } = req.params;
+  const userRole = req.user.role;
+  const userBranchId = req.user.branchId;
 
-  const sql = `
+  let sql = `
     UPDATE expenses 
     SET expense_name=?, amount=?, cost=?, date=?, category=?, is_profit=?
     WHERE id=?
   `;
+  let params = [
+    expense_name,
+    Number(amount || 0),
+    Number(cost || 0),
+    date,
+    category,
+    Number(is_profit),
+    id
+  ];
 
-  db.query(
-    sql,
-    [
-      expense_name,
-      Number(amount || 0),
-      Number(cost || 0),
-      date,
-      category,
-      Number(is_profit),
-      id
-    ],
-    (err) => {
+  if (userRole !== "SUPER_ADMIN") {
+    sql += " AND branch_id = ?";
+    params.push(userBranchId);
+  }
+
+  db.query(sql, params, (err) => {
       if (err) return res.status(500).json(err);
       res.json({ message: "Expense updated successfully" });
     }
@@ -101,10 +120,20 @@ router.put("/:id", (req, res) => {
 });
 
 // ================= DELETE EXPENSE =================
-router.delete("/:id", (req, res) => {
+router.delete("/:id", authenticateUser, (req, res) => {
   const { id } = req.params;
+  const userRole = req.user.role;
+  const userBranchId = req.user.branchId;
 
-  db.query("DELETE FROM expenses WHERE id=?", [id], (err) => {
+  let sql = "DELETE FROM expenses WHERE id=?";
+  let params = [id];
+
+  if (userRole !== "SUPER_ADMIN") {
+    sql += " AND branch_id = ?";
+    params.push(userBranchId);
+  }
+
+  db.query(sql, params, (err) => {
     if (err) return res.status(500).json(err);
     res.json({ message: "Expense deleted successfully" });
   });

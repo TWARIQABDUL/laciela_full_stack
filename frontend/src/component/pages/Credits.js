@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import axios from "axios";
 import { useNavigate, useLocation } from "react-router-dom";
+import { AuthContext } from "../../context/AuthContext";
 
 function Employees() {
+  const { user } = useContext(AuthContext);
   const navigate = useNavigate();
   const location = useLocation();
   const [employees, setEmployees] = useState([]);
@@ -69,23 +71,25 @@ function Employees() {
       <div className="card shadow-lg mb-4 border-0" style={{ borderRadius: "15px" }}>
         <div className="card-body d-flex justify-content-between align-items-center">
           <h4 className="fw-bold mb-0" style={{ letterSpacing: "1px", color: "#1C1C1C" }}>Employees</h4>
-          <button 
-            className="btn btn-gradient shadow-sm"
-            onClick={handleAddEmployee}
-            style={{
-              background: "linear-gradient(90deg, #0F2027, #203A43, #2C5364)",
-              color: "#fff",
-              fontWeight: "600",
-              letterSpacing: "0.5px",
-              borderRadius: "10px",
-              padding: "0.5rem 1.2rem",
-              transition: "all 0.3s ease",
-            }}
-            onMouseEnter={(e) => e.target.style.transform = "scale(1.05)"}
-            onMouseLeave={(e) => e.target.style.transform = "scale(1)"}
-          >
-            + Add Employee
-          </button>
+          {user?.role !== "MANAGER" && (
+            <button 
+              className="btn btn-gradient shadow-sm"
+              onClick={handleAddEmployee}
+              style={{
+                background: "linear-gradient(90deg, #0F2027, #203A43, #2C5364)",
+                color: "#fff",
+                fontWeight: "600",
+                letterSpacing: "0.5px",
+                borderRadius: "10px",
+                padding: "0.5rem 1.2rem",
+                transition: "all 0.3s ease",
+              }}
+              onMouseEnter={(e) => e.target.style.transform = "scale(1.05)"}
+              onMouseLeave={(e) => e.target.style.transform = "scale(1)"}
+            >
+              + Add Employee
+            </button>
+          )}
         </div>
       </div>
 

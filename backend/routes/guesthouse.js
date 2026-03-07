@@ -1,18 +1,29 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
+const authenticateUser = require("../middleware/auth");
 
 // ================= GET BY DATE =================
-router.get("/", (req, res) => {
+router.get("/", authenticateUser, (req, res) => {
   const { date } = req.query;
+  const userRole = req.user.role;
+  const userBranchId = req.user.branchId;
 
   if (!date) {
     return res.status(400).json({ message: "Date is required" });
   }
 
-  const sql = "SELECT * FROM guesthouse WHERE date = ? ORDER BY id DESC";
+  let sql = "SELECT * FROM guesthouse WHERE date = ?";
+  let params = [date];
 
-  db.query(sql, [date], (err, rows) => {
+  if (userRole !== "SUPER_ADMIN") {
+    sql += " AND branch_id = ?";
+    params.push(userBranchId);
+  }
+
+  sql += " ORDER BY id DESC";
+
+  db.query(sql, params, (err, rows) => {
     if (err) {
       console.error(err);
       return res.status(500).json(err);
@@ -23,8 +34,9 @@ router.get("/", (req, res) => {
 });
 
 // ================= INSERT =================
-router.post("/", (req, res) => {
+router.post("/", authenticateUser, (req, res) => {
   const { date, vip, normal, vip_price, normal_price } = req.body;
+  const userBranchId = req.user.branchId;
 
   if (!date) {
     return res.status(400).json({ message: "Ntamakuru ahari y' izi tariki" });
@@ -32,8 +44,8 @@ router.post("/", (req, res) => {
 
   const sql = `
     INSERT INTO guesthouse 
-    (date, vip, normal, vip_price, normal_price)
-    VALUES (?, ?, ?, ?, ?)
+    (date, vip, normal, vip_price, normal_price, branch_id)
+    VALUES (?, ?, ?, ?, ?, ?)
   `;
 
   db.query(
@@ -43,7 +55,8 @@ router.post("/", (req, res) => {
       vip || 0,
       normal || 0,
       vip_price || 0,
-      normal_price || 0
+      normal_price || 0,
+      userBranchId
     ],
     (err, result) => {
       if (err) {
@@ -60,13 +73,21 @@ router.post("/", (req, res) => {
 });
 
 // ================= UPDATE =================
-router.put("/:id", (req, res) => {
+router.put("/:id", authenticateUser, (req, res) => {
   const { id } = req.params;
   const fields = req.body;
+  const userRole = req.user.role;
+  const userBranchId = req.user.branchId;
 
-  const sql = "UPDATE guesthouse SET ? WHERE id = ?";
+  let sql = "UPDATE guesthouse SET ? WHERE id = ?";
+  let params = [fields, id];
 
-  db.query(sql, [fields, id], (err) => {
+  if (userRole !== "SUPER_ADMIN") {
+    sql += " AND branch_id = ?";
+    params.push(userBranchId);
+  }
+
+  db.query(sql, params, (err) => {
     if (err) {
       console.error(err);
       return res.status(500).json(err);
@@ -77,12 +98,20 @@ router.put("/:id", (req, res) => {
 });
 
 // ================= DELETE =================
-router.delete("/:id", (req, res) => {
+router.delete("/:id", authenticateUser, (req, res) => {
   const { id } = req.params;
+  const userRole = req.user.role;
+  const userBranchId = req.user.branchId;
 
-  const sql = "DELETE FROM guesthouse WHERE id = ?";
+  let sql = "DELETE FROM guesthouse WHERE id = ?";
+  let params = [id];
 
-  db.query(sql, [id], (err) => {
+  if (userRole !== "SUPER_ADMIN") {
+    sql += " AND branch_id = ?";
+    params.push(userBranchId);
+  }
+
+  db.query(sql, params, (err) => {
     if (err) {
       console.error(err);
       return res.status(500).json(err);
