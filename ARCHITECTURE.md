@@ -85,11 +85,11 @@ To maximize security and prevent local Cross-Site Scripting (XSS) leaks, the sys
 2. **Configure Environment Variables**:
    In `backend/.env`, set the database configuration and secret JWT key:
    ```dotenv
-   DB_HOST=mysql-...
-   DB_USER=avnadmin
-   DB_PASS=...
+   DB_HOST=127.0.0.1
+   DB_USER=lacaselo_user
+   DB_PASS=localpassword
    DB_NAME=lacaselo_management
-   DB_PORT=16497
+   DB_PORT=3307
    JWT_SECRET=super_secret_jwt_key
    ```
    In `frontend/.env`, set the API Base URL:

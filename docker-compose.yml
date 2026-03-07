@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: lacaselo_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: lacaselo_management
+      MYSQL_USER: lacaselo_user
+      MYSQL_PASSWORD: localpassword
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./mysql-data:/var/lib/mysql
+      - ./init-db:/docker-entrypoint-initdb.d
