@@ -23,6 +23,8 @@
    - [Totals / Dashboard](#totals--dashboard---api)
    - [Reports](#reports---apireports)
 6. [Frontend Architecture](#6-frontend-architecture)
+7. [Local Development Setup](#7-local-development-setup)
+8. [Docker (Local MySQL)](#8-docker-local-mysql)
 
 ---
 
@@ -690,3 +692,253 @@ The change request workflow lets non-admin staff request data corrections. Super
 - **Optimistic UI**: POST responses return the newly created record so the frontend can append to state without refetching the whole list.
 - **Change Request Pattern**: Non-admin users see a "Request Change" button instead of a direct edit form. Submits to `POST /api/requests`.
 - **Auto Day Carry-over**: The Bar endpoint auto-generates today's records from yesterday's closing stock if none exist for the current date.
+
+---
+
+## 7. Local Development Setup
+
+### Prerequisites
+| Tool | Minimum Version | Notes |
+|---|---|---|
+| Node.js | v18+ | Use `node --version` to check |
+| npm | v9+ | Comes bundled with Node.js |
+| Git | Any recent | For cloning the repo |
+| MySQL Client | Optional | DBeaver or TablePlus for visual inspection |
+
+> **Database**: This project uses **Aiven Cloud MySQL**. No local database install is required — credentials are provided via `.env`.
+
+---
+
+### Step 1 — Clone the Repository
+
+```bash
+git clone https://github.com/TWARIQABDUL/laciela_full_stack.git
+cd laciela_full_stack
+```
+
+---
+
+### Step 2 — Install All Dependencies
+
+The repo uses **NPM Workspaces**. A single install from the root handles both `backend/` and `frontend/` simultaneously.
+
+```bash
+npm install
+```
+
+---
+
+### Step 3 — Configure Environment Variables
+
+**Backend** — create `backend/.env`:
+```dotenv
+# Aiven Cloud MySQL Connection
+DB_HOST=your-aiven-host.aivencloud.com
+DB_USER=your_db_user
+DB_PASS=your_db_password
+DB_NAME=your_db_name
+DB_PORT=3306
+
+# JWT Secret (use a long random string in production)
+JWT_SECRET=your_super_secret_jwt_key
+
+# Server port
+PORT=5000
+```
+
+**Frontend** — create `frontend/.env`:
+```dotenv
+# Must point to the backend API (include /api at the end)
+REACT_APP_API_BASE_URL=http://localhost:5000/api
+```
+
+> ⚠️ **Never commit `.env` files.** They are already in `.gitignore`.
+
+---
+
+### Step 4 — Run Database Migrations
+
+Migrations are versioned SQL files in `backend/migrations/`. Run them in order using the migration runner:
+
+```bash
+node backend/migrate.js
+```
+
+This will apply any pending migrations to the connected Aiven database and print a success/failure message for each file.
+
+---
+
+### Step 5 — (Optional) Seed the Database
+
+Populate the database with demo branches and users representing every role. Useful for a fresh environment or after wiping data.
+
+```bash
+node backend/seed.js
+```
+
+This creates:
+- 2 demo branches (`branch-001`, `branch-002`)
+- One user per role per branch (e.g. `superadmin1`, `barman1`, `manager2`, etc.) — all with password `password123`
+
+---
+
+### Step 6 — Start the Application
+
+One command from the project root boots both **backend** and **frontend** concurrently:
+
+```bash
+npm start
+```
+
+| Service | URL |
+|---|---|
+| **Frontend** (React) | http://localhost:3000 |
+| **Backend API** (Express) | http://localhost:5000 |
+
+---
+
+### Test Logins (after seeding)
+
+| Role | Username | Password |
+|---|---|---|
+| Super Admin | `superadmin1` | `password123` |
+| Admin | `admin1` | `password123` |
+| Manager | `manager1` | `password123` |
+| Bar Man | `barman1` | `password123` |
+| Chief Kitchen | `chiefkitchen1` | `password123` |
+| Token Man | `tokenman1` | `password123` |
+| Land Lord | `landlord1` | `password123` |
+| Gym | `gym1` | `password123` |
+
+> `EMPLOYEE` role users cannot log in by design (blocked at auth layer).
+
+---
+
+### Common Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `EADDRINUSE: port 5000 already in use` | Run `npx kill-port 5000 3000` from project root |
+| `Cannot GET /api/...` — 404 on all routes | Make sure you started with `npm start` from the **root**, not from inside `backend/` |
+| Frontend shows blank page after login | Check `frontend/.env` — ensure `REACT_APP_API_BASE_URL` ends with `/api` and has no trailing slash |
+| DB connection error on startup | Double-check `backend/.env` credentials and ensure Aiven allows your IP (check Aiven firewall rules) |
+| `DeprecationWarning` in frontend console | Safe to ignore — these are from webpack-dev-server internals |
+
+---
+
+## 8. Docker (Local MySQL)
+
+The project includes a `docker-compose.yml` for spinning up a **local MySQL 8.0 database** — useful when you want to develop entirely offline without using the Aiven Cloud instance.
+
+> ⚠️ **The Node.js app itself is NOT Dockerized.** Only the MySQL database runs inside Docker. You still run `npm start` from the host machine.
+
+### `docker-compose.yml` breakdown
+
+```yaml
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: lacaselo_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: lacaselo_management
+      MYSQL_USER: lacaselo_user
+      MYSQL_PASSWORD: localpassword
+    ports:
+      - "3307:3306"        # Host port 3307 → Container port 3306
+    volumes:
+      - ./mysql-data:/var/lib/mysql          # Persistent data volume
+      - ./init-db:/docker-entrypoint-initdb.d # Auto-runs SQL on first boot
+```
+
+| Config | Value | Notes |
+|---|---|---|
+| **Image** | `mysql:8.0` | Stable MySQL version |
+| **Container name** | `lacaselo_db` | Used for `docker exec` commands |
+| **Host port** | `3307` | Avoids conflict with any locally installed MySQL on 3306 |
+| **Database** | `lacaselo_management` | Auto-created on first start |
+| **User** | `lacaselo_user` | App user (not root) |
+| **Data volume** | `./mysql-data` | DB files persist across container restarts |
+| **Init volume** | `./init-db` | SQL files here run **once** on first container boot |
+
+---
+
+### `init-db/01-schema.sql`
+
+The `init-db/` directory contains the **baseline schema** that gets applied when the container boots for the first time. This creates the original table structure:
+
+```
+init-db/
+└── 01-schema.sql    ← Creates: bar_products, billiard, branch, credits,
+                                 employee_loans, employees, expenses,
+                                 guesthouse, gym, kitchen_products, users
+```
+
+> **Note:** This is the **original V1 schema**. After the container is up, you must also run the versioned migrations in `backend/migrations/` to bring the schema up to the current state (adding `branch_id` columns, `edit_requests` table, etc.).
+
+---
+
+### Using Docker for Local Development
+
+**Prerequisites:**
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux)
+
+**Step 1 — Start the MySQL container:**
+```bash
+docker compose up -d
+```
+> The `-d` flag runs it in the background. On first run, Docker will pull the `mysql:8.0` image and execute `init-db/01-schema.sql` automatically.
+
+**Step 2 — Set `backend/.env` to point at the Docker container:**
+```dotenv
+DB_HOST=127.0.0.1
+DB_USER=lacaselo_user
+DB_PASS=localpassword
+DB_NAME=lacaselo_management
+DB_PORT=3307
+JWT_SECRET=your_secret_key
+PORT=5000
+```
+
+**Step 3 — Apply migrations on top of the baseline schema:**
+```bash
+node backend/migrate.js
+```
+
+**Step 4 — (Optional) Seed the database:**
+```bash
+node backend/seed.js
+```
+
+**Step 5 — Start the app:**
+```bash
+npm start
+```
+
+---
+
+### Useful Docker Commands
+
+| Command | What it does |
+|---|---|
+| `docker compose up -d` | Start the MySQL container in the background |
+| `docker compose down` | Stop and remove the container (data is preserved in `./mysql-data`) |
+| `docker compose down -v` | Stop and **delete all data** (destructive — resets the database) |
+| `docker compose logs -f mysql` | Stream live MySQL logs |
+| `docker exec -it lacaselo_db mysql -u lacaselo_user -p` | Open an interactive MySQL shell inside the container |
+| `docker ps` | Check if the container is running |
+
+---
+
+### Aiven Cloud vs Docker — When to Use Which
+
+| Scenario | Use |
+|---|---|
+| Team development / shared data | **Aiven Cloud** |
+| Offline development / no internet | **Docker local MySQL** |
+| CI/CD pipelines | **Docker local MySQL** |
+| Production-like testing | **Aiven Cloud** |
+
