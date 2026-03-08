@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import axios from "axios";
+import { AuthContext } from "../../context/AuthContext";
 
 function Bar() {
+  const { user } = useContext(AuthContext);
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -16,7 +19,16 @@ function Bar() {
   const [loading, setLoading] = useState(false);
   const [showLowStock, setShowLowStock] = useState(false);
 
+  // Modal State for Edit Requests
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [requestItem, setRequestItem] = useState(null);
+  const [requestData, setRequestData] = useState({
+    new_sold: "",
+    reason: "",
+  });
+
   const API_URL = `${process.env.REACT_APP_API_BASE_URL}/drinks`;
+  const REQUESTS_URL = `${process.env.REACT_APP_API_BASE_URL}/requests`;
 
   const fetchProducts = async (date) => {
     try {
@@ -65,7 +77,6 @@ function Bar() {
   };
 
   const handleAdd = async () => {
-
     const name = prompt("Product name:");
     if (!name) return;
 
@@ -85,7 +96,15 @@ function Bar() {
   };
 
   const handleEdit = async (product) => {
+    if (!isSuperAdmin) {
+      // Open Change Request Modal for Non-Admins 
+      setRequestItem(product);
+      setRequestData({ new_sold: product.sold, reason: "" });
+      setShowRequestModal(true);
+      return;
+    }
 
+    // Standard Super Admin Edit Logic
     const newName = prompt("Edit product name:", product.name);
     if (!newName) return;
 
@@ -104,6 +123,30 @@ function Bar() {
     fetchProducts(selectedDate);
   };
 
+  const submitEditRequest = async (e) => {
+    e.preventDefault();
+    if (!requestData.new_sold || !requestData.reason) return;
+
+    try {
+      await axios.post(REQUESTS_URL, {
+        module: "bar_products",
+        record_id: requestItem.id,
+        record_date: selectedDate,
+        product_name: requestItem.name,
+        old_sold: requestItem.sold,
+        new_sold: requestData.new_sold,
+        price: requestItem.price,
+        reason: requestData.reason,
+      });
+
+      alert("Change Request submitted to Super Admin!");
+      setShowRequestModal(false);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to submit request");
+    }
+  };
+
   const handleLocalChange = (id, field, value) => {
     setProducts((prev) =>
       prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
@@ -111,6 +154,7 @@ function Bar() {
   };
 
   const saveStock = async (product) => {
+    if (!isSuperAdmin) return; // Non-admins can't save directly!
 
     await axios.put(`${API_URL}/stock/${product.id}`, {
       entree: Number(product.entree) || 0,
@@ -192,9 +236,11 @@ function Bar() {
               ▶
             </button>
 
-            <button className="btn btn-success ms-3" onClick={handleAdd}>
-              + Add Product
-            </button>
+            {isSuperAdmin && (
+              <button className="btn btn-success ms-3" onClick={handleAdd}>
+                + Add Product
+              </button>
+            )}
 
           </div>
         </div>
@@ -252,7 +298,7 @@ function Bar() {
               <tr>
                 <th>#</th>
                 <th>Product</th>
-                <th>Cost</th>
+                {isSuperAdmin && <th>Cost</th>}
                 <th>Selling</th>
                 <th>Opening</th>
                 <th>Stock In</th>
@@ -260,7 +306,7 @@ function Bar() {
                 <th>Sold</th>
                 <th>Closing</th>
                 <th>Sales</th>
-                <th></th>
+                <th>Actions</th>
               </tr>
 
             </thead>
@@ -294,32 +340,40 @@ function Bar() {
 
                       <td className="fw-bold">{p.name}</td>
 
-                      <td>RWF {formatNumber(p.initial_price)}</td>
+                      {isSuperAdmin && <td>RWF {formatNumber(p.initial_price)}</td>}
 
                       <td>RWF {formatNumber(p.price)}</td>
 
                       <td>{p.opening_stock}</td>
 
                       <td>
-                        <input
-                          type="number"
-                          className="form-control form-control-sm text-center"
-                          value={p.entree || ""}
-                          onChange={(e)=>handleLocalChange(p.id,"entree",e.target.value)}
-                          onBlur={()=>saveStock(p)}
-                        />
+                        {isSuperAdmin ? (
+                          <input
+                            type="number"
+                            className="form-control form-control-sm text-center"
+                            value={p.entree || ""}
+                            onChange={(e)=>handleLocalChange(p.id,"entree",e.target.value)}
+                            onBlur={()=>saveStock(p)}
+                          />
+                        ) : (
+                          <span>{p.entree}</span>
+                        )}
                       </td>
 
                       <td>{p.total_stock}</td>
 
                       <td>
-                        <input
-                          type="number"
-                          className="form-control form-control-sm text-center"
-                          value={p.sold || ""}
-                          onChange={(e)=>handleLocalChange(p.id,"sold",e.target.value)}
-                          onBlur={()=>saveStock(p)}
-                        />
+                        {isSuperAdmin ? (
+                          <input
+                            type="number"
+                            className="form-control form-control-sm text-center"
+                            value={p.sold || ""}
+                            onChange={(e)=>handleLocalChange(p.id,"sold",e.target.value)}
+                            onBlur={()=>saveStock(p)}
+                          />
+                        ) : (
+                          <span>{p.sold}</span>
+                        )}
                       </td>
 
                       <td className="fw-bold">{p.closing_stock}</td>
@@ -333,7 +387,7 @@ function Bar() {
                           className="btn btn-warning btn-sm"
                           onClick={()=>handleEdit(p)}
                         >
-                          Edit
+                          {isSuperAdmin ? "Edit" : "Request Change"}
                         </button>
                       </td>
 
@@ -350,6 +404,64 @@ function Bar() {
         </div>
 
       </div>
+
+      {/* REQUEST CHANGE MODAL */}
+      {showRequestModal && requestItem && (
+        <>
+          <div className="modal-backdrop fade show"></div>
+          <div className="modal fade show d-block" tabIndex="-1">
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content">
+                <div className="modal-header bg-warning text-dark">
+                  <h5 className="modal-title fw-bold">Request Data Change</h5>
+                  <button type="button" className="btn-close" onClick={() => setShowRequestModal(false)}></button>
+                </div>
+                <div className="modal-body">
+                  <p className="text-muted mb-4">
+                    Direct edits are locked for standard staff. State the correct number of items sold and note the reason (e.g., miscounted). 
+                    A Super Admin will review this request.
+                  </p>
+                  <form onSubmit={submitEditRequest}>
+                    <div className="mb-3">
+                      <label className="fw-bold">Product</label>
+                      <input type="text" className="form-control" value={requestItem.name} readOnly disabled />
+                    </div>
+                    <div className="mb-3">
+                      <label className="fw-bold">Currently Saved "Sold" Target</label>
+                      <input type="text" className="form-control" value={requestItem.sold} readOnly disabled />
+                    </div>
+                    <div className="mb-3">
+                      <label className="fw-bold text-danger">New Correct "Sold" Target</label>
+                      <input 
+                        type="number" 
+                        className="form-control" 
+                        required 
+                        value={requestData.new_sold} 
+                        onChange={(e) => setRequestData({...requestData, new_sold: e.target.value})} 
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label className="fw-bold">Reason for Change (Required)</label>
+                      <textarea 
+                        className="form-control" 
+                        rows="3" 
+                        placeholder="I accidentally counted 12 but it was actually 10..."
+                        required
+                        value={requestData.reason}
+                        onChange={(e) => setRequestData({...requestData, reason: e.target.value})}
+                      ></textarea>
+                    </div>
+                    <div className="d-flex justify-content-end gap-2 mt-4">
+                      <button type="button" className="btn btn-secondary" onClick={() => setShowRequestModal(false)}>Cancel</button>
+                      <button type="submit" className="btn btn-danger text-light">Submit Request</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
     </div>
   );

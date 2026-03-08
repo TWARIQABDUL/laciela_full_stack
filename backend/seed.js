@@ -12,7 +12,7 @@ async function seed() {
     const tables = [
       "users", "branch", "bar_products", "kitchen_products", 
       "billiard", "gym", "guesthouse", "expenses", 
-      "credits", "employee_loans", "employees"
+      "employee_loans"
     ];
 
     for (const table of tables) {
@@ -34,25 +34,53 @@ async function seed() {
     const roles = ['SUPER_ADMIN', 'BAR_MAN', 'MANAGER', 'CHIEF_KITCHEN', 'ADMIN', 'TOKEN_MAN', 'LAND_LORD', 'GYM'];
 
     // Insert users for branch 1
-    const usersBranch1 = roles.map((role) => [
-      `${role.toLowerCase().replace('_', '')}1`, // e.g., superadmin1
-      role,
-      'password123',
-      'active',
-      branch1Id
-    ]);
+    const usersData = [];
+    roles.forEach((role) => {
+      // Mock salary logic based on role
+      let payment = 0;
+      if (role === 'SUPER_ADMIN' || role === 'ADMIN') payment = 300000;
+      else if (role === 'MANAGER') payment = 200000;
+      else if (role === 'CHIEF_KITCHEN') payment = 150000;
+      else if (role === 'BAR_MAN' || role === 'TOKEN_MAN') payment = 80000;
+      else payment = 50000; 
+
+      usersData.push([
+        `${role.toLowerCase().replace('_', '')}1`, // e.g., superadmin1
+        'password123',
+        role,
+        'active',
+        branch1Id,
+        payment // Set actual payment
+      ]);
+    });
 
     // Insert users for branch 2
-    const usersBranch2 = roles.map((role) => [
-      `${role.toLowerCase().replace('_', '')}2`, // e.g., superadmin2
-      role,
-      'password123',
-      'active',
-      branch2Id
-    ]);
+    roles.forEach((role) => {
+      let payment = 0;
+      if (role === 'SUPER_ADMIN' || role === 'ADMIN') payment = 300000;
+      else if (role === 'MANAGER') payment = 200000;
+      else if (role === 'CHIEF_KITCHEN') payment = 150000;
+      else if (role === 'BAR_MAN' || role === 'TOKEN_MAN') payment = 80000;
+      else payment = 50000;
 
-    await dbPromise.query("INSERT INTO users (username, role, password, status, branch_id) VALUES ?", [[...usersBranch1, ...usersBranch2]]);
-    console.log("✅ Users inserted...");
+      usersData.push([
+        `${role.toLowerCase().replace('_', '')}2`, // e.g., superadmin2
+        'password123',
+        role,
+        'active',
+        branch2Id,
+        payment // Set actual payment
+      ]);
+    });
+
+    // Add "employee" users who don't log in
+    usersData.push(["alice_manager",   "pass123", "EMPLOYEE",    "active", branch1Id, 150000]);
+    usersData.push(["bob_bartender",   "pass123", "EMPLOYEE",    "active", branch1Id,  80000]);
+    usersData.push(["charlie_chef",    "pass123", "EMPLOYEE",    "active", branch2Id, 120000]);
+    usersData.push(["diana_gym",       "pass123", "EMPLOYEE",    "active", branch2Id,  90000]);
+
+    await dbPromise.query("INSERT INTO users (username, password, role, status, branch_id, payment) VALUES ?", [usersData]);
+    console.log("✅ Users seeded (Admins, Managers, Staff, Employees)...");
 
     // Seed mock data for dashboard modules
     const today = new Date().toISOString().split("T")[0];
@@ -103,14 +131,21 @@ async function seed() {
     ];
     await dbPromise.query("INSERT INTO expenses (expense_name, amount, cost, date, category, is_profit, branch_id) VALUES ?", [expensesData]);
 
-    // 7. Credits (Staff)
-    const creditsData = [
-      ["Alice Manager", 150000, branch1Id],
-      ["Bob Bartender", 80000, branch1Id],
-      ["Charlie Chef", 120000, branch2Id],
-      ["Diana Gym", 90000, branch2Id]
-    ];
-    await dbPromise.query("INSERT INTO credits (name, payment, branch_id) VALUES ?", [creditsData]);
+    // 7. Employee Loans (Staff) — linked to users by userId (where role='EMPLOYEE')
+    const [insertedEmployees] = await dbPromise.query("SELECT userId, username, branch_id FROM users WHERE role='EMPLOYEE'");
+
+    const empMap = {};
+    insertedEmployees.forEach(u => { empMap[u.username] = u.userId; });
+
+    const loansData = [
+      // employee_id, amount, reason, loan_date, remaining, branch_id
+      [empMap["alice_manager"], 50000, "Medical emergency", "2026-03-01", 50000, branch1Id],
+      [empMap["bob_bartender"], 10000, "Transport", "2026-03-05", 10000, branch1Id],
+    ].filter(row => row[0]); // only insert if mapping succeeded
+    
+    if (loansData.length > 0) {
+      await dbPromise.query("INSERT INTO employee_loans (employee_id, amount, reason, loan_date, remaining, branch_id) VALUES ?", [loansData]);
+    }
 
     console.log("✅ Transaction tables seeded...");
 

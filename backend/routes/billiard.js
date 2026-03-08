@@ -70,13 +70,12 @@ router.put("/:id", authenticateUser, (req, res) => {
   const userRole = req.user.role;
   const userBranchId = req.user.branchId;
 
+  if (userRole !== "SUPER_ADMIN") {
+    return res.status(403).json({ message: "Edit access restricted to Super Admin. Please submit a Change Request." });
+  }
+
   let sql = "UPDATE billiard SET token=?, cash=?, cash_momo=? WHERE id=?";
   let params = [Number(token || 0), Number(cash || 0), Number(cash_momo || 0), id];
-
-  if (userRole !== "SUPER_ADMIN") {
-    sql += " AND branch_id = ?";
-    params.push(userBranchId);
-  }
 
   db.query(sql, params, (err) => {
     if (err) return res.status(500).json(err);

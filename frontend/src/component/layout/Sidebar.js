@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useContext } from "react";
 import { NavLink } from "react-router-dom";
+import { AuthContext } from "../../context/AuthContext";
 import {
   FaHome,
   FaChartBar,
@@ -10,6 +11,8 @@ import {
 } from "react-icons/fa";
 
 function Sidebar() {
+  const { user } = useContext(AuthContext);
+
   return (
     <div className="sidebar">
       <div className="logo-section">
@@ -46,12 +49,14 @@ function Sidebar() {
           </NavLink>
         </li>
 
-        <li>
-          <NavLink to="/reports" className="menu-link">
-            <FaFileAlt className="icon" />
-            Reports
-          </NavLink>
-        </li>
+        {(user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") && (
+          <li>
+            <NavLink to="/reports" className="menu-link">
+              <FaFileAlt className="icon" />
+              Reports
+            </NavLink>
+          </li>
+        )}
 
         <li>
           <NavLink to="/settings" className="menu-link">

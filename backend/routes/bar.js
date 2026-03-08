@@ -173,17 +173,16 @@ router.put("/stock/:id", authenticateUser, (req, res) => {
   const userRole = req.user.role;
   const userBranchId = req.user.branchId;
 
+  if (userRole !== "SUPER_ADMIN") {
+    return res.status(403).json({ message: "Edit access restricted to Super Admin. Please submit a Change Request." });
+  }
+
   if (!date) {
     return res.status(400).json({ message: "Date required" });
   }
 
   let sql = `UPDATE bar_products SET entree = ?, sold = ? WHERE id = ? AND date = ?`;
   let params = [Number(entree) || 0, Number(sold) || 0, id, date];
-
-  if (userRole !== "SUPER_ADMIN") {
-    sql += ` AND branch_id = ?`;
-    params.push(userBranchId);
-  }
 
   db.query(sql, params, (err) => {
       if (err) return res.status(500).json(err);
@@ -201,17 +200,16 @@ router.put("/price/:id", authenticateUser, (req, res) => {
   const userRole = req.user.role;
   const userBranchId = req.user.branchId;
 
+  if (userRole !== "SUPER_ADMIN") {
+    return res.status(403).json({ message: "Edit access restricted to Super Admin. Please submit a Change Request." });
+  }
+
   if (!date) {
     return res.status(400).json({ message: "Date required" });
   }
 
   let sql = `UPDATE bar_products SET initial_price = ?, price = ? WHERE id = ? AND date = ?`;
   let params = [Number(initial_price) || 0, Number(price) || 0, id, date];
-
-  if (userRole !== "SUPER_ADMIN") {
-    sql += ` AND branch_id = ?`;
-    params.push(userBranchId);
-  }
 
   db.query(sql, params, (err) => {
       if (err) return res.status(500).json(err);
@@ -229,17 +227,16 @@ router.put("/edit/:id", authenticateUser, (req, res) => {
   const userRole = req.user.role;
   const userBranchId = req.user.branchId;
 
+  if (userRole !== "SUPER_ADMIN") {
+    return res.status(403).json({ message: "Edit access restricted to Super Admin. Please submit a Change Request." });
+  }
+
   if (!name || !date) {
     return res.status(400).json({ message: "Name and date required" });
   }
 
   let sql = `UPDATE bar_products SET name = ?, initial_price = ?, price = ?, opening_stock = ? WHERE id = ? AND date = ?`;
   let params = [name, Number(initial_price) || 0, Number(price) || 0, Number(opening_stock) || 0, id, date];
-
-  if (userRole !== "SUPER_ADMIN") {
-    sql += ` AND branch_id = ?`;
-    params.push(userBranchId);
-  }
 
   db.query(sql, params, (err) => {
       if (err) return res.status(500).json(err);

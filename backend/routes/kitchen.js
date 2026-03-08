@@ -122,6 +122,10 @@ router.put("/entree/:id", authenticateUser, (req, res) => {
   const userRole = req.user.role;
   const userBranchId = req.user.branchId;
 
+  if (userRole !== "SUPER_ADMIN") {
+    return res.status(403).json({ message: "Edit access restricted to Super Admin. Please submit a Change Request." });
+  }
+
   if (entree == null || !date) {
     return res.status(400).json({
       message: "Entree and date are required",
@@ -130,11 +134,6 @@ router.put("/entree/:id", authenticateUser, (req, res) => {
 
   let sql = `UPDATE kitchen_products SET entree = ? WHERE id = ? AND date = ?`;
   let params = [Number(entree), id, date];
-
-  if (userRole !== "SUPER_ADMIN") {
-    sql += ` AND branch_id = ?`;
-    params.push(userBranchId);
-  }
 
   db.query(sql, params, (err) => {
     if (err) {
@@ -155,6 +154,10 @@ router.put("/sold/:id", authenticateUser, (req, res) => {
   const userRole = req.user.role;
   const userBranchId = req.user.branchId;
 
+  if (userRole !== "SUPER_ADMIN") {
+    return res.status(403).json({ message: "Edit access restricted to Super Admin. Please submit a Change Request." });
+  }
+
   if (sold == null || !date) {
     return res.status(400).json({
       message: "Sold and date are required",
@@ -163,11 +166,6 @@ router.put("/sold/:id", authenticateUser, (req, res) => {
 
   let sql = `UPDATE kitchen_products SET sold = ? WHERE id = ? AND date = ?`;
   let params = [Number(sold), id, date];
-
-  if (userRole !== "SUPER_ADMIN") {
-    sql += ` AND branch_id = ?`;
-    params.push(userBranchId);
-  }
 
   db.query(sql, params, (err) => {
     if (err) {

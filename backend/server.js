@@ -13,6 +13,8 @@ const totalsRoutes = require("./routes/totals");
 const billiardRoutes = require("./routes/billiard");
 const guesthouseRoutes = require("./routes/guesthouse");
 const gymRoutes = require("./routes/gym");
+const requestsRoutes = require("./routes/requests");
+const reportsRoutes = require("./routes/reports");
 
 const app = express();
 
@@ -37,6 +39,8 @@ app.use("/api/credits", creditsRoutes);
 app.use("/api/billiard", billiardRoutes);
 app.use("/api/guesthouse", guesthouseRoutes);
 app.use("/api/gym", gymRoutes);
+app.use("/api/requests", requestsRoutes);
+app.use("/api/reports", reportsRoutes);
 app.use("/api", totalsRoutes);
 
 // ================= DEFAULT ROUTE =================

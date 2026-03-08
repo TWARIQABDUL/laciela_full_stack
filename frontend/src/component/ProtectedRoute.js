@@ -2,8 +2,8 @@ import React, { useContext } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
-const ProtectedRoute = () => {
-  const { isAuthenticated, loading } = useContext(AuthContext);
+const ProtectedRoute = ({ allowedRoles }) => {
+  const { user, isAuthenticated, loading } = useContext(AuthContext);
 
   if (loading) {
     return (
@@ -16,7 +16,16 @@ const ProtectedRoute = () => {
   }
 
   // If not authenticated, redirect to the login page
-  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // If roles are specified and the user's role is not included, redirect to home
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
 };
 
 export default ProtectedRoute;

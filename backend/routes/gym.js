@@ -60,6 +60,10 @@ router.put("/:id", authenticateUser, (req, res) => {
   const userRole = req.user.role;
   const userBranchId = req.user.branchId;
 
+  if (userRole !== "SUPER_ADMIN") {
+    return res.status(403).json({ message: "Edit access restricted to Super Admin. Please submit a Change Request." });
+  }
+
   let { daily_people, monthly_people, cash, cash_momo } = req.body;
 
   daily_people = Number(daily_people || 0);
@@ -74,11 +78,6 @@ router.put("/:id", authenticateUser, (req, res) => {
     WHERE id=?
   `;
   let params = [daily_people, monthly_people, total_people, cash, cash_momo, id];
-
-  if (userRole !== "SUPER_ADMIN") {
-    sql += ` AND branch_id = ?`;
-    params.push(userBranchId);
-  }
 
   db.query(sql, params, (err) => {
     if (err) return res.status(500).json(err);

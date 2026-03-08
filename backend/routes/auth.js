@@ -23,6 +23,11 @@ router.post("/login", async (req, res) => {
 
     const user = rows[0];
 
+    // Block EMPLOYEE role from logging into the system
+    if (user.role === 'EMPLOYEE') {
+      return res.status(403).json({ error: "Access Denied. Employee accounts cannot log in." });
+    }
+
     // Assuming plain text passwords for now based on previous seeding.
     // In production, compare with bcrypt: await bcrypt.compare(password, user.password)
     if (user.password !== password) {

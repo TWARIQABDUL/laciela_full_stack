@@ -1,11 +1,22 @@
-import React, { useContext } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../../context/AuthContext";
+import axios from "axios";
 import logo from "../assets/logo.png";
+import { FaBell } from "react-icons/fa";
 
 function Navbar() {
   const { user, logout, isAuthenticated } = useContext(AuthContext);
   const navigate = useNavigate();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    if (isAuthenticated && user?.role === "SUPER_ADMIN") {
+      axios.get(`${process.env.REACT_APP_API_BASE_URL}/requests/count`)
+        .then(res => setPendingCount(res.data.count))
+        .catch(err => console.error("Could not fetch requests count", err));
+    }
+  }, [isAuthenticated, user]);
 
   const handleLogout = async () => {
     await logout();
@@ -21,6 +32,7 @@ function Navbar() {
     { name: "Billiard", path: "/billiard", allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "TOKEN_MAN"] },
     { name: "Expenses", path: "/expenses", allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
     { name: "Staff", path: "/credits", allowedRoles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
+    { name: "Reports", path: "/reports", allowedRoles: ["SUPER_ADMIN", "ADMIN"] },
   ];
 
   return (
@@ -61,9 +73,21 @@ function Navbar() {
                 </li>
               ))}
 
-              {/* User Info / Logout */}
+              {/* User Info / Logout / Notifications */}
               {isAuthenticated ? (
                 <>
+                  {user?.role === "SUPER_ADMIN" && (
+                    <li className="nav-item mx-2 position-relative">
+                      <Link to="/requests" className="nav-link text-warning fs-5">
+                        <FaBell />
+                        {pendingCount > 0 && (
+                          <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{fontSize: "0.6rem"}}>
+                            {pendingCount}
+                          </span>
+                        )}
+                      </Link>
+                    </li>
+                  )}
                   <li className="nav-item mx-2 text-warning d-flex align-items-center fw-bold">
                     Hello, {user?.username} ({user?.role})
                   </li>
