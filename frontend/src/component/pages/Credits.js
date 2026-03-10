@@ -1,192 +1,208 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useState, useContext, useCallback } from "react";
 import axios from "axios";
 import { useNavigate, useLocation } from "react-router-dom";
 import { AuthContext } from "../../context/AuthContext";
+import { FaUsers, FaPlus, FaMoneyBillWave, FaUserShield, FaSchool, FaEye, FaArrowRight, FaIdBadge } from "react-icons/fa";
+import "../../style/premium-pages.css";
+
+const SYSTEM_ROLES = [
+  { value: "SUPER_ADMIN", label: "Super Admin" },
+  { value: "ADMIN", label: "Admin" },
+  { value: "MANAGER", label: "Manager" },
+  { value: "BAR_MAN", label: "Barman" },
+  { value: "CHIEF_KITCHEN", label: "Chef" },
+  { value: "TOKEN_MAN", label: "Token Man" },
+  { value: "LAND_LORD", label: "Land Lord" },
+  { value: "GYM", label: "Gym Staff" },
+  { value: "EMPLOYEE", label: "General Employee (No Login)" },
+];
 
 function Employees() {
-  const { user } = useContext(AuthContext);
+  const { user, isAuthenticated } = useContext(AuthContext);
   const navigate = useNavigate();
   const location = useLocation();
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [branches, setBranches] = useState([]);
 
-  // Modal State
+  // Modals & Selection
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  
+  // Add User Form State
+  const [newUser, setNewUser] = useState({
+    username: "", password: "", role: "EMPLOYEE", branch_id: "", payment: ""
+  });
+
   const [deductions, setDeductions] = useState([]);
   const [loadingDeductions, setLoadingDeductions] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-
-  const [totalPayment, setTotalPayment] = useState(0);
+  const [totalPayroll, setTotalPayroll] = useState(0);
 
   const API_URL = `${process.env.REACT_APP_API_BASE_URL}/credits`;
 
-  const fetchEmployees = async () => {
+  const fetchBranches = useCallback(async () => {
+    if (user?.role !== "SUPER_ADMIN") return;
+    try {
+      const res = await axios.get(`${process.env.REACT_APP_API_BASE_URL}/reports/branches`, { withCredentials: true });
+      setBranches(res.data.branches || []);
+    } catch (err) {
+      console.error("Error fetching branches:", err);
+    }
+  }, [user]);
+
+  const fetchEmployees = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await axios.get(API_URL);
-      setEmployees(res.data.employees || []);
-      recalcTotals(res.data.employees || []);
+      const res = await axios.get(API_URL, { withCredentials: true });
+      const data = res.data.employees || [];
+      setEmployees(data);
+      setTotalPayroll(data.reduce((sum, e) => sum + Number(e.payment || 0), 0));
     } catch (err) {
       console.error(err);
       setEmployees([]);
-      setTotalPayment(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL]);
 
-  const recalcTotals = (data) => {
-    let paymentSum = 0;
-    data.forEach((e) => {
-      paymentSum += Number(e.payment || 0);
-    });
-    setTotalPayment(paymentSum);
-  };
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchEmployees();
+      fetchBranches();
+    }
+  }, [isAuthenticated, fetchEmployees, fetchBranches, location.pathname]);
 
-  const handleAddEmployee = async () => {
-    const name = prompt("Employee Login Username (e.g., worker1):");
-    const payment = Number(prompt("Base Monthly Salary (RWF):")) || 0;
-    if (!name || !name.trim()) return alert("Username is required");
-
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    if (!newUser.username) return alert("Username is required");
     try {
-      const res = await axios.post(API_URL, { name, payment });
-      const newEmployees = [res.data, ...employees];
-      setEmployees(newEmployees);
-      recalcTotals(newEmployees);
+      const res = await axios.post(API_URL, newUser, { withCredentials: true });
+      setEmployees([res.data, ...employees]);
+      setTotalPayroll(prev => prev + Number(newUser.payment || 0));
+      setShowAddModal(false);
+      setNewUser({ username: "", password: "", role: "EMPLOYEE", branch_id: "", payment: "" });
     } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.error || "Error adding employee");
+      alert(err.response?.data?.error || "Error creating user");
     }
   };
 
   const handleViewEmployee = async (employee) => {
     setSelectedUser(employee);
     setLoadingDeductions(true);
-    setDeductions([]); // reset before fetching
+    setDeductions([]);
+    setShowViewModal(true);
     try {
-      const res = await axios.get(`${API_URL}/${employee.id}/deductions`);
+      const res = await axios.get(`${API_URL}/${employee.id}/deductions`, { withCredentials: true });
       setDeductions(res.data);
     } catch (error) {
       console.error("Error fetching deductions", error);
     } finally {
       setLoadingDeductions(false);
     }
-    // Show modal manually instead of relying on window.bootstrap which might be undefined
-    setShowModal(true);
-  };
-
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setSelectedUser(null);
   };
 
   const formatNumber = (value) => Number(value || 0).toLocaleString();
 
-  useEffect(() => {
-    fetchEmployees();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
-
   return (
-    <div className="container mt-4">
-      {/* ===== HEADER ===== */}
-      <div className="card shadow-lg mb-4 border-0" style={{ borderRadius: "15px" }}>
-        <div className="card-body d-flex justify-content-between align-items-center">
-          <h4 className="fw-bold mb-0" style={{ letterSpacing: "1px", color: "#1C1C1C" }}>Staff & Employee Management</h4>
-          {user?.role !== "MANAGER" && (
-            <button 
-              className="btn btn-gradient shadow-sm"
-              onClick={handleAddEmployee}
-              style={{
-                background: "linear-gradient(90deg, #0F2027, #203A43, #2C5364)",
-                color: "#fff",
-                fontWeight: "600",
-                letterSpacing: "0.5px",
-                borderRadius: "10px",
-                padding: "0.5rem 1.2rem",
-                transition: "all 0.3s ease",
-              }}
-              onMouseEnter={(e) => e.target.style.transform = "scale(1.05)"}
-              onMouseLeave={(e) => e.target.style.transform = "scale(1)"}
-            >
-              + Add Employee (No Login)
-            </button>
-          )}
+    <div className="premium-container">
+      
+      {/* HEADER & TOP SUMMARY */}
+      <div className="controls-card">
+        <div className="d-flex align-items-center">
+          <div className="p-3 rounded-circle me-3" style={{background: 'rgba(99, 102, 241, 0.1)', color:'#6366f1'}}>
+            <FaUsers size={24}/>
+          </div>
+          <div>
+            <h2 className="page-title">Staff Management</h2>
+            <p className="text-muted mb-0 small text-uppercase fw-bold tracking-wider">Payroll & Access Control Center</p>
+          </div>
+        </div>
+
+        {user?.role !== "MANAGER" && (
+          <button className="add-btn" onClick={() => setShowAddModal(true)}>
+            <FaPlus className="me-2"/> Add User / Account
+          </button>
+        )}
+      </div>
+
+      {/* KPI SUMMARY */}
+      <div className="stats-row">
+        <div className="stats-card-premium" style={{background: 'linear-gradient(135deg, #4338ca 0%, #6366f1 100%)', color:'white'}}>
+          <div className="d-flex w-100 justify-content-between align-items-start mb-3">
+             <h6 className="opacity-75">Monthly Payroll</h6>
+             <FaMoneyBillWave/>
+          </div>
+          <h4 className="w-100 text-start">{formatNumber(totalPayroll)} RWF</h4>
+          <p className="w-100 text-start small mb-0 mt-2 opacity-75">Total obligation for {employees.length} staff</p>
+        </div>
+
+        <div className="stats-card-premium" style={{background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', color:'white'}}>
+          <div className="d-flex w-100 justify-content-between align-items-start mb-3">
+             <h6 className="opacity-75">Active Accounts</h6>
+             <FaUserShield/>
+          </div>
+          <h4 className="w-100 text-start">{employees.filter(e => e.role !== 'EMPLOYEE').length}</h4>
+          <p className="w-100 text-start small mb-0 mt-2 opacity-75">System login users</p>
+        </div>
+
+        <div className="stats-card-premium" style={{background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color:'white'}}>
+          <div className="d-flex w-100 justify-content-between align-items-start mb-3">
+             <h6 className="opacity-75">Branch Presence</h6>
+             <FaSchool/>
+          </div>
+          <h4 className="w-100 text-start">{[...new Set(employees.map(e => e.branch_id))].length}</h4>
+          <p className="w-100 text-start small mb-0 mt-2 opacity-75">Distributed across units</p>
         </div>
       </div>
 
-      {/* ===== SUMMARY CARDS ===== */}
-      <div className="row g-4 mb-4">
-        <div className="col-md-6">
-          <div className="card shadow border-0 rounded-3" style={{ backgroundColor: "#D4AF37", color: "#000" }}>
-            <div className="card-body text-center">
-              <h6 className="text-uppercase fw-semibold">Total Monthly Payroll</h6>
-              <h4 className="fw-bold">RWF {formatNumber(totalPayment)}</h4>
-            </div>
-          </div>
-        </div>
-        <div className="col-md-6">
-          <div className="card shadow border-0 rounded-3" style={{ backgroundColor: "#34495e", color: "#fff" }}>
-            <div className="card-body text-center">
-              <h6 className="text-uppercase fw-semibold">Total Staff Members</h6>
-              <h4 className="fw-bold">{employees.length}</h4>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ===== EMPLOYEES TABLE ===== */}
-      <div className="card shadow-lg border-0 rounded-4" style={{ overflow: "hidden" }}>
+      {/* STAFF TABLE */}
+      <div className="premium-table-card">
         <div className="table-responsive">
-          <table className="table table-hover text-center mb-0" style={{ borderCollapse: "separate", borderSpacing: "0 8px" }}>
-            <thead style={{ backgroundColor: "#1C1C1C", color: "#fff", letterSpacing: "0.5px" }}>
+          <table className="table premium-table mb-0">
+            <thead>
               <tr>
-                <th>#</th>
-                <th>Username</th>
+                <th className="text-start ps-4">Identification</th>
                 <th>System Role</th>
-                <th>Base Monthly Salary</th>
+                <th>Location / Branch</th>
+                <th>Monthly Basis</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan="4">Loading...</td>
-                </tr>
+                <tr><td colSpan="5" className="text-center py-5">Loading digital identities...</td></tr>
               ) : employees.length === 0 ? (
-                <tr>
-                  <td colSpan="4">No staff found</td>
-                </tr>
+                <tr><td colSpan="5" className="text-center py-5">No staff records found in global registry.</td></tr>
               ) : (
-                employees.map((e, i) => (
-                  <tr 
-                    key={e.id} 
-                    style={{ backgroundColor: "#F9F9F9", borderRadius: "10px", marginBottom: "8px" }}
-                    className="shadow-sm"
-                  >
-                    <td>{i + 1}</td>
-                    <td>
-                      <span
-                        style={{
-                          color: "#0d6efd",
-                          cursor: "pointer",
-                          fontWeight: "600",
-                          transition: "all 0.2s ease",
-                          textDecoration: "underline",
-                          textUnderlineOffset: "3px"
-                        }}
-                        onMouseEnter={(ev) => ev.target.style.color = "#203A43"}
-                        onMouseLeave={(ev) => ev.target.style.color = "#0d6efd"}
-                        onClick={() => handleViewEmployee(e)}
-                      >
-                         {e.name}
-                      </span>
+                employees.map((e) => (
+                  <tr key={e.id}>
+                    <td className="text-start ps-4">
+                      <div className="d-flex align-items-center">
+                        <div className="avatar-circle me-3" style={{background: '#f1f5f9', color: '#64748b', fontWeight:'700'}}>
+                          {e.name.slice(0,2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="fw-bold">{e.name}</div>
+                          <div className="small text-muted">ID: {String(e.id).padStart(4,'0')}</div>
+                        </div>
+                      </div>
                     </td>
                     <td>
-                      <span className={`badge ${e.role === 'EMPLOYEE' ? 'bg-secondary' : 'bg-primary'}`}>
-                        {e.role}
+                      <span className={`badge rounded-pill px-3 py-2 ${e.role === 'SUPER_ADMIN' ? 'bg-danger' : (e.role === 'EMPLOYEE' ? 'bg-light text-dark' : 'bg-primary')}`}>
+                         {e.role.replace('_', ' ')}
                       </span>
                     </td>
-                    <td className="fw-bold text-success">RWF {formatNumber(e.payment)}</td>
+                    <td><span className="text-muted"><FaSchool className="me-1"/> {e.branch_name || 'Global HQ'}</span></td>
+                    <td className="fw-bold text-success">{formatNumber(e.payment)} RWF</td>
+                    <td>
+                      <button className="icon-btn text-primary me-2" onClick={() => handleViewEmployee(e)} title="Profile View">
+                        <FaEye/>
+                      </button>
+                      <button className="icon-btn text-dark" onClick={() => navigate(`/employees/${e.id}/loans`)} title="Finances">
+                        <FaArrowRight/>
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -195,113 +211,199 @@ function Employees() {
         </div>
       </div>
 
-      {/* ===== EMPLOYEE DETAILS MODAL ===== */}
-      <div 
-        className={`modal fade ${showModal ? "show" : ""}`} 
-        id="employeeModal" 
-        tabIndex="-1" 
-        style={{ display: showModal ? "block" : "none", backgroundColor: showModal ? "rgba(0,0,0,0.6)" : "transparent" }}
-        aria-hidden={!showModal}
-      >
-        <div className="modal-dialog modal-dialog-centered modal-lg">
-          <div className="modal-content border-0 shadow-lg rounded-4">
-            
-            {/* Modal Header */}
-            <div className="modal-header text-white" style={{ background: "linear-gradient(135deg, #1C1C1C, #34495e)" }}>
-              <h5 className="modal-title fw-bold">
-                <i className="bi bi-person-badge me-2"></i> 
-                {selectedUser ? `${selectedUser.name}'s Profile` : 'Loading...'}
-              </h5>
-              <button type="button" className="btn-close btn-close-white" onClick={handleCloseModal} aria-label="Close"></button>
+      {/* ADD USER MODAL */}
+      {showAddModal && (
+        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+          <div className="premium-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header-premium">
+              <h5 className="mb-0 fw-bold">Register New Staff / User</h5>
+              <button className="btn-close btn-close-white" onClick={() => setShowAddModal(false)}></button>
             </div>
+            <form onSubmit={handleCreateUser} className="p-4">
+              <div className="row g-3">
+                <div className="col-12">
+                  <label className="form-label small fw-bold text-uppercase">Identification (Username)</label>
+                  <input 
+                    type="text" className="form-control premium-input" required 
+                    value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})}
+                    placeholder="e.g. john_doe"
+                  />
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label small fw-bold text-uppercase">Access Secret (Password)</label>
+                  <input 
+                    type="password" className="form-control premium-input"
+                    value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})}
+                    placeholder="Min 6 chars"
+                  />
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label small fw-bold text-uppercase">Base Salary (RWF)</label>
+                  <input 
+                    type="number" className="form-control premium-input"
+                    value={newUser.payment} onChange={e => setNewUser({...newUser, payment: e.target.value})}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label small fw-bold text-uppercase">System Role</label>
+                  <select 
+                    className="form-select premium-input"
+                    value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}
+                  >
+                    {SYSTEM_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  </select>
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label small fw-bold text-uppercase">Assigned Branch</label>
+                  <select 
+                    className="form-select premium-input"
+                    value={newUser.branch_id} onChange={e => setNewUser({...newUser, branch_id: e.target.value})}
+                  >
+                    <option value="">Global / Select Branch</option>
+                    {branches.map(b => <option key={b.branch_id} value={b.branch_id}>{b.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="d-flex justify-content-end mt-4 pt-3 border-top">
+                <button type="button" className="btn btn-light me-2 rounded-pill px-4" onClick={() => setShowAddModal(false)}>Cancel</button>
+                <button type="submit" className="add-btn px-5">Finalize Registration</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
-            {/* Modal Body */}
-            <div className="modal-body p-4 bg-light">
-              {selectedUser && (
-                <>
-                  <div className="row mb-4">
-                    <div className="col-md-6 mb-3 mb-md-0">
-                      <div className="card shadow-sm border-0 h-100 p-3 pt-4 text-center rounded-4">
-                         <h6 className="text-muted text-uppercase fw-semibold mb-1">Current Base Salary</h6>
-                         <h3 className="fw-bold text-success mb-0">RWF {formatNumber(selectedUser.payment)}</h3>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="card shadow-sm border-0 h-100 p-3 pt-4 text-center rounded-4">
-                         <h6 className="text-muted text-uppercase fw-semibold mb-1">System Role</h6>
-                         <h4 className="fw-bold text-dark mb-0">{selectedUser.role}</h4>
-                      </div>
-                    </div>
-                  </div>
+      {/* VIEW DETAILS MODAL */}
+      {showViewModal && (
+        <div className="modal-overlay" onClick={() => setShowViewModal(false)}>
+          <div className="premium-modal modal-lg" onClick={e => e.stopPropagation()}>
+            <div className="modal-header-premium" style={{background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)'}}>
+              <h5 className="mb-0 fw-bold"><FaIdBadge className="me-2"/> Employee Dossier: {selectedUser?.name}</h5>
+              <button className="btn-close btn-close-white" onClick={() => setShowViewModal(false)}></button>
+            </div>
+            <div className="p-4">
+               {selectedUser && (
+                 <>
+                   <div className="row g-4 mb-4">
+                     <div className="col-md-4">
+                        <div className="p-3 rounded-4 bg-light text-center shadow-sm">
+                           <h6 className="text-muted small text-uppercase mb-1">Role</h6>
+                           <div className="fw-bold text-dark">{selectedUser.role}</div>
+                        </div>
+                     </div>
+                     <div className="col-md-4">
+                        <div className="p-3 rounded-4 bg-light text-center shadow-sm">
+                           <h6 className="text-muted small text-uppercase mb-1">Monthly Salary</h6>
+                           <div className="fw-bold text-success">{formatNumber(selectedUser.payment)} RWF</div>
+                        </div>
+                     </div>
+                     <div className="col-md-4">
+                        <div className="p-3 rounded-4 bg-light text-center shadow-sm">
+                           <h6 className="text-muted small text-uppercase mb-1">Branch Unit</h6>
+                           <div className="fw-bold text-primary">{selectedUser.branch_name || 'Main Registry'}</div>
+                        </div>
+                     </div>
+                   </div>
 
-                  {/* Deduction Ledger */}
-                  <div className="card shadow-sm border-0 rounded-4">
-                    <div className="card-header bg-white border-bottom-0 pt-4 pb-2">
-                       <h5 className="fw-bold text-danger mb-0">
-                         <i className="bi bi-receipt me-2"></i> Deduction Ledger
-                       </h5>
-                    </div>
-                    <div className="card-body p-0">
-                      <div className="table-responsive" style={{ maxHeight: "250px" }}>
-                        <table className="table table-hover align-middle mb-0">
-                          <thead className="table-light sticky-top">
+                   <div className="card border-0 shadow-sm rounded-4 overflow-hidden">
+                      <div className="p-3 bg-danger text-white d-flex align-items-center">
+                         <FaMoneyBillWave className="me-2"/> Deduction History (Fines & Penalties)
+                      </div>
+                      <div className="table-responsive" style={{maxHeight:'300px'}}>
+                        <table className="table table-hover mb-0">
+                          <thead className="table-light">
                             <tr>
-                              <th className="px-4">Date</th>
-                              <th>Reason</th>
-                              <th className="text-end px-4">Amount Deducted</th>
+                              <th className="ps-4">Timestamp</th>
+                              <th>Justification</th>
+                              <th className="text-end pe-4">Reduction</th>
                             </tr>
                           </thead>
                           <tbody>
                             {loadingDeductions ? (
-                              <tr><td colSpan="3" className="text-center py-4 text-muted">Loading logs...</td></tr>
+                              <tr><td colSpan="3" className="text-center py-4">Accessing ledger...</td></tr>
                             ) : deductions.length === 0 ? (
-                              <tr><td colSpan="3" className="text-center py-4 text-muted">No deductions on record. Clean sheet! 🎉</td></tr>
+                              <tr><td colSpan="3" className="text-center py-4 text-muted small">No disciplinary reductions found. Excellent status.</td></tr>
                             ) : (
                               deductions.map(ded => (
                                 <tr key={ded.id}>
-                                  <td className="px-4 text-muted" style={{ fontSize: "0.9rem" }}>
-                                    {new Date(ded.date).toLocaleDateString()} <br/>
-                                    <small>{new Date(ded.date).toLocaleTimeString()}</small>
-                                  </td>
+                                  <td className="ps-4 small text-muted">{new Date(ded.date).toLocaleString()}</td>
                                   <td>{ded.reason}</td>
-                                  <td className="text-end px-4 text-danger fw-bold">- RWF {formatNumber(ded.amount)}</td>
+                                  <td className="text-end pe-4 fw-bold text-danger">- {formatNumber(ded.amount)} RWF</td>
                                 </tr>
                               ))
                             )}
                           </tbody>
                         </table>
                       </div>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+                   </div>
 
-            {/* Modal Footer */}
-            <div className="modal-footer bg-white rounded-bottom-4 border-top-0 pt-0 pb-4 px-4 d-flex justify-content-between">
-              <button 
-                type="button" 
-                className="btn btn-outline-secondary rounded-pill px-4 fw-bold" 
-                onClick={handleCloseModal}
-              >
-                Close
-              </button>
-              <button 
-                type="button" 
-                className="btn btn-primary rounded-pill px-4 shadow-sm fw-bold"
-                style={{ background: "#203A43", border: "none" }}
-                onClick={() => {
-                  handleCloseModal();
-                  navigate(`/employees/${selectedUser.id}/loans`);
-                }}
-              >
-                View Cash Loans History <i className="bi bi-arrow-right ms-1"></i>
-              </button>
+                   <div className="d-flex justify-content-between mt-4">
+                      <button className="btn btn-outline-secondary rounded-pill px-4" onClick={() => setShowViewModal(false)}>Close Dossier</button>
+                      <button className="add-btn" onClick={() => navigate(`/employees/${selectedUser.id}/loans`)}>
+                        Detailed Finance History <FaArrowRight className="ms-2"/>
+                      </button>
+                   </div>
+                 </>
+               )}
             </div>
-
           </div>
         </div>
-      </div>
+      )}
+
+      <style>{`
+        .avatar-circle {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.9rem;
+        }
+        .icon-btn {
+          border: none;
+          background: rgba(0,0,0,0.05);
+          padding: 8px;
+          border-radius: 8px;
+          transition: all 0.2s;
+        }
+        .icon-btn:hover { background: rgba(0,0,0,0.1); transform: translateY(-2px); }
+        .modal-overlay {
+          position: fixed;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0,0,0,0.5);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1050;
+        }
+        .premium-modal {
+          background: white;
+          border-radius: 20px;
+          width: 90%;
+          max-width: 600px;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+          overflow: hidden;
+        }
+        .modal-lg { max-width: 800px; }
+        .modal-header-premium {
+          padding: 20px;
+          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+          color: white;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .premium-input {
+          border-radius: 10px;
+          padding: 10px 15px;
+          border: 1px solid #e2e8f0;
+          font-size: 0.9rem;
+        }
+        .premium-input:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1); }
+      `}</style>
 
     </div>
   );

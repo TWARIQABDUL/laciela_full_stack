@@ -38,7 +38,6 @@ function processAndReturn(rows, res) {
 
 // =====================================================
 // GET PRODUCTS BY DATE
-// AUTO CREATE NEXT DAY FROM YESTERDAY CLOSING
 // =====================================================
 router.get("/", authenticateUser, (req, res) => {
   const { date } = req.query;
@@ -51,12 +50,14 @@ router.get("/", authenticateUser, (req, res) => {
 
   let branchFilter = "";
   let params = [date];
+  let branchIdVal = null;
   if (userRole !== "SUPER_ADMIN") {
     branchFilter = " AND branch_id = ?";
     params.push(userBranchId);
+    branchIdVal = userBranchId;
   }
 
-  // 1️⃣ Check if date already exists
+  // 1️⃣ Check if date exists
   db.query(
     `SELECT * FROM bar_products WHERE date = ?${branchFilter} ORDER BY id DESC`,
     params,
@@ -67,28 +68,26 @@ router.get("/", authenticateUser, (req, res) => {
         return processAndReturn(rows, res);
       }
 
-      // 2️⃣ Get yesterday
-      const yesterday = new Date(date);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yDate = yesterday.toISOString().split("T")[0];
-
-      let yParams = [yDate];
+      // 2️⃣ Find the LATEST previous entry (Not just date - 1)
+      let latestParams = [date];
+      let latestFilter = "WHERE date < ?";
       if (userRole !== "SUPER_ADMIN") {
-        yParams.push(userBranchId);
+        latestFilter += " AND branch_id = ?";
+        latestParams.push(userBranchId);
       }
 
       db.query(
-        `SELECT * FROM bar_products WHERE date = ?${branchFilter}`,
-        yParams,
-        (err2, yesterdayRows) => {
+        `SELECT * FROM bar_products ${latestFilter} AND date = (SELECT MAX(date) FROM bar_products ${latestFilter})`,
+        [...latestParams, ...latestParams],
+        (err2, prevRows) => {
           if (err2) return res.status(500).json(err2);
 
-          if (yesterdayRows.length === 0) {
+          if (prevRows.length === 0) {
             return res.json({ products: [], totalEarned: 0 });
           }
 
-          // 3️⃣ Create new day from yesterday closing
-          const insertValues = yesterdayRows.map((p) => {
+          // 3️⃣ Auto-carry forward: Closing becomes Opening
+          const insertValues = prevRows.map((p) => {
             const closing_stock =
               (Number(p.opening_stock) || 0) +
               (Number(p.entree) || 0) -
@@ -99,8 +98,8 @@ router.get("/", authenticateUser, (req, res) => {
               Number(p.initial_price) || 0,
               Number(p.price) || 0,
               closing_stock > 0 ? closing_stock : 0,
-              0,
-              0,
+              0, // entree
+              0, // sold
               date,
               p.branch_id
             ];
@@ -134,7 +133,7 @@ router.get("/", authenticateUser, (req, res) => {
 // ADD PRODUCT
 // =====================================================
 router.post("/", authenticateUser, (req, res) => {
-  const { name, initial_price, price, opening_stock, date } = req.body;
+  const { name, initial_price, price, opening_stock, entree, sold, date } = req.body;
   const userBranchId = req.user.branchId;
 
   if (!name || !date) {
@@ -144,47 +143,40 @@ router.post("/", authenticateUser, (req, res) => {
   db.query(
     `INSERT INTO bar_products
      (name, initial_price, price, opening_stock, entree, sold, date, branch_id)
-     VALUES (?, ?, ?, ?, 0, 0, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       name,
       Number(initial_price) || 0,
       Number(price) || 0,
       Number(opening_stock) || 0,
+      Number(entree) || 0,
+      Number(sold) || 0,
       date,
       userBranchId
     ],
     (err, result) => {
       if (err) return res.status(500).json(err);
-
-      res.json({
-        message: "Product added successfully",
-        id: result.insertId,
-      });
+      res.json({ message: "Product added successfully", id: result.insertId });
     }
   );
 });
 
 // =====================================================
-// UPDATE STOCK (ENTREE + SOLD)
+// UPDATE STOCK
 // =====================================================
 router.put("/stock/:id", authenticateUser, (req, res) => {
   const { entree, sold, date } = req.body;
   const { id } = req.params;
   const userRole = req.user.role;
-  const userBranchId = req.user.branchId;
 
   if (userRole !== "SUPER_ADMIN") {
-    return res.status(403).json({ message: "Edit access restricted to Super Admin. Please submit a Change Request." });
+    return res.status(403).json({ message: "Access restricted to Super Admin." });
   }
 
-  if (!date) {
-    return res.status(400).json({ message: "Date required" });
-  }
-
-  let sql = `UPDATE bar_products SET entree = ?, sold = ? WHERE id = ? AND date = ?`;
-  let params = [Number(entree) || 0, Number(sold) || 0, id, date];
-
-  db.query(sql, params, (err) => {
+  db.query(
+    `UPDATE bar_products SET entree = ?, sold = ? WHERE id = ? AND date = ?`,
+    [Number(entree) || 0, Number(sold) || 0, id, date],
+    (err) => {
       if (err) return res.status(500).json(err);
       res.json({ message: "Stock updated successfully" });
     }
@@ -192,57 +184,39 @@ router.put("/stock/:id", authenticateUser, (req, res) => {
 });
 
 // =====================================================
-// UPDATE PRICE ONLY
-// =====================================================
-router.put("/price/:id", authenticateUser, (req, res) => {
-  const { initial_price, price, date } = req.body;
-  const { id } = req.params;
-  const userRole = req.user.role;
-  const userBranchId = req.user.branchId;
-
-  if (userRole !== "SUPER_ADMIN") {
-    return res.status(403).json({ message: "Edit access restricted to Super Admin. Please submit a Change Request." });
-  }
-
-  if (!date) {
-    return res.status(400).json({ message: "Date required" });
-  }
-
-  let sql = `UPDATE bar_products SET initial_price = ?, price = ? WHERE id = ? AND date = ?`;
-  let params = [Number(initial_price) || 0, Number(price) || 0, id, date];
-
-  db.query(sql, params, (err) => {
-      if (err) return res.status(500).json(err);
-      res.json({ message: "Price updated successfully" });
-    }
-  );
-});
-
-// =====================================================
-// EDIT PRODUCT (NAME + COST + SELLING + OPENING STOCK)
+// EDIT PRODUCT
 // =====================================================
 router.put("/edit/:id", authenticateUser, (req, res) => {
   const { name, initial_price, price, opening_stock, date } = req.body;
   const { id } = req.params;
   const userRole = req.user.role;
-  const userBranchId = req.user.branchId;
 
   if (userRole !== "SUPER_ADMIN") {
-    return res.status(403).json({ message: "Edit access restricted to Super Admin. Please submit a Change Request." });
+    return res.status(403).json({ message: "Access restricted to Super Admin." });
   }
 
-  if (!name || !date) {
-    return res.status(400).json({ message: "Name and date required" });
-  }
-
-  let sql = `UPDATE bar_products SET name = ?, initial_price = ?, price = ?, opening_stock = ? WHERE id = ? AND date = ?`;
-  let params = [name, Number(initial_price) || 0, Number(price) || 0, Number(opening_stock) || 0, id, date];
-
-  db.query(sql, params, (err) => {
+  db.query(
+    `UPDATE bar_products SET name = ?, initial_price = ?, price = ?, opening_stock = ? WHERE id = ? AND date = ?`,
+    [name, Number(initial_price) || 0, Number(price) || 0, Number(opening_stock) || 0, id, date],
+    (err) => {
       if (err) return res.status(500).json(err);
       res.json({ message: "Product updated successfully" });
     }
   );
+});
+
+// =====================================================
+// DELETE PRODUCT
+// =====================================================
+router.delete("/:id", authenticateUser, (req, res) => {
+  const { id } = req.params;
+  if (req.user.role !== "SUPER_ADMIN") {
+    return res.status(403).json({ message: "Only Super Admin can delete items." });
+  }
+  db.query("DELETE FROM bar_products WHERE id = ?", [id], (err) => {
+    if (err) return res.status(500).json(err);
+    res.json({ message: "Product deleted successfully" });
+  });
 });
 
 module.exports = router;

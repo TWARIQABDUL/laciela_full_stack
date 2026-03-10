@@ -1,132 +1,122 @@
 import React, { useEffect, useState, useContext } from "react";
 import axios from "axios";
 import { AuthContext } from "../../context/AuthContext";
+import { FaPlus, FaTrash, FaEdit, FaChevronLeft, FaChevronRight, FaExclamationTriangle } from "react-icons/fa";
+import "../../style/premium-pages.css";
 
 function Bar() {
-  const { user } = useContext(AuthContext);
+  const { user, isAuthenticated } = useContext(AuthContext);
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
   const today = new Date().toISOString().split("T")[0];
-
   const [products, setProducts] = useState([]);
   const [selectedDate, setSelectedDate] = useState(today);
-
-  const [totalEarned, setTotalEarned] = useState(0);
-  const [totalProfit, setTotalProfit] = useState(0);
-  const [totalStockValue, setTotalStockValue] = useState(0);
-  const [lowStockProducts, setLowStockProducts] = useState([]);
-
+  const [totals, setTotals] = useState({ earned: 0, profit: 0, stockValue: 0, lowStockCount: 0 });
   const [loading, setLoading] = useState(false);
   const [showLowStock, setShowLowStock] = useState(false);
 
-  // Modal State for Edit Requests
+  // Modal states
+  const [showAddModal, setShowAddModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
-  const [requestItem, setRequestItem] = useState(null);
-  const [requestData, setRequestData] = useState({
-    new_sold: "",
-    reason: "",
+  const [editingProduct, setEditingProduct] = useState(null);
+  
+  const [formData, setFormData] = useState({
+    name: "", initial_price: "", price: "", opening_stock: "", entree: "0", sold: "0"
   });
+
+  const [requestData, setRequestData] = useState({ new_sold: "", reason: "" });
+  const [requestItem, setRequestItem] = useState(null);
 
   const API_URL = `${process.env.REACT_APP_API_BASE_URL}/drinks`;
   const REQUESTS_URL = `${process.env.REACT_APP_API_BASE_URL}/requests`;
 
-  const fetchProducts = async (date) => {
+  const fetchProducts = React.useCallback(async (date) => {
     try {
       setLoading(true);
-
-      const res = await axios.get(API_URL, { params: { date } });
-
+      const res = await axios.get(API_URL, { params: { date }, withCredentials: true });
       const prods = res.data.products || [];
+      
+      const profitSum = prods.reduce((sum, p) => sum + Number(p.profit || 0), 0);
+      const stockValue = prods.reduce((sum, p) => sum + (Number(p.closing_stock || 0) * Number(p.initial_price || 0)), 0);
+      const lowStock = prods.filter(p => Number(p.closing_stock) < 5);
 
       setProducts(prods);
-      setTotalEarned(res.data.totalEarned || 0);
-
-      const profitSum = prods.reduce((sum, p) => sum + Number(p.profit || 0), 0);
-
-      const stockValue = prods.reduce(
-        (sum, p) =>
-          sum + Number(p.closing_stock || 0) * Number(p.initial_price || 0),
-        0
-      );
-
-      const lowStock = prods.filter((p) => Number(p.closing_stock) < 5);
-
-      setTotalProfit(profitSum);
-      setTotalStockValue(stockValue);
-      setLowStockProducts(lowStock);
-
+      setTotals({
+        earned: res.data.totalEarned || 0,
+        profit: profitSum,
+        stockValue: stockValue,
+        lowStockCount: lowStock.length
+      });
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL]);
 
   useEffect(() => {
-    fetchProducts(selectedDate);
-  }, [selectedDate]);
+    if (isAuthenticated) fetchProducts(selectedDate);
+  }, [selectedDate, isAuthenticated, fetchProducts]);
 
   const changeDate = (days) => {
     const newDate = new Date(selectedDate);
     newDate.setDate(newDate.getDate() + days);
     const formatted = newDate.toISOString().split("T")[0];
-
-    if (formatted > today) return;
-
-    setSelectedDate(formatted);
+    if (formatted <= today) setSelectedDate(formatted);
   };
 
-  const handleAdd = async () => {
-    const name = prompt("Product name:");
-    if (!name) return;
-
-    const initial_price = Number(prompt("Cost price:")) || 0;
-    const price = Number(prompt("Selling price:")) || 0;
-    const opening_stock = Number(prompt("Opening stock:")) || 0;
-
-    await axios.post(API_URL, {
-      name,
-      initial_price,
-      price,
-      opening_stock,
-      date: selectedDate,
-    });
-
-    fetchProducts(selectedDate);
+  const handleOpenAdd = () => {
+    setEditingProduct(null);
+    setFormData({ name: "", initial_price: "", price: "", opening_stock: "", entree: "0", sold: "0" });
+    setShowAddModal(true);
   };
 
-  const handleEdit = async (product) => {
+  const handleOpenEdit = (product) => {
     if (!isSuperAdmin) {
-      // Open Change Request Modal for Non-Admins 
       setRequestItem(product);
       setRequestData({ new_sold: product.sold, reason: "" });
       setShowRequestModal(true);
       return;
     }
-
-    // Standard Super Admin Edit Logic
-    const newName = prompt("Edit product name:", product.name);
-    if (!newName) return;
-
-    const newCost = Number(prompt("Edit cost price:", product.initial_price));
-    const newSelling = Number(prompt("Edit selling price:", product.price));
-    const newOpening = Number(prompt("Edit opening stock:", product.opening_stock));
-
-    await axios.put(`${API_URL}/edit/${product.id}`, {
-      name: newName,
-      initial_price: newCost || 0,
-      price: newSelling || 0,
-      opening_stock: newOpening || 0,
-      date: selectedDate,
+    setEditingProduct(product);
+    setFormData({
+      name: product.name,
+      initial_price: product.initial_price,
+      price: product.price,
+      opening_stock: product.opening_stock,
+      entree: product.entree,
+      sold: product.sold
     });
+    setShowAddModal(true);
+  };
 
-    fetchProducts(selectedDate);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingProduct) {
+        await axios.put(`${API_URL}/edit/${editingProduct.id}`, { ...formData, date: selectedDate }, { withCredentials: true });
+      } else {
+        await axios.post(API_URL, { ...formData, date: selectedDate }, { withCredentials: true });
+      }
+      setShowAddModal(false);
+      fetchProducts(selectedDate);
+    } catch (err) {
+      alert("Error saving product");
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this product?")) return;
+    try {
+      await axios.delete(`${API_URL}/${id}`, { withCredentials: true });
+      fetchProducts(selectedDate);
+    } catch (err) {
+      alert("Failed to delete product");
+    }
   };
 
   const submitEditRequest = async (e) => {
     e.preventDefault();
-    if (!requestData.new_sold || !requestData.reason) return;
-
     try {
       await axios.post(REQUESTS_URL, {
         module: "bar_products",
@@ -137,330 +127,231 @@ function Bar() {
         new_sold: requestData.new_sold,
         price: requestItem.price,
         reason: requestData.reason,
-      });
-
-      alert("Change Request submitted to Super Admin!");
+      }, { withCredentials: true });
+      alert("Request submitted!");
       setShowRequestModal(false);
     } catch (err) {
-      console.error(err);
       alert("Failed to submit request");
     }
   };
 
-  const handleLocalChange = (id, field, value) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
-    );
+  const updateInstantStock = async (product, field, value) => {
+    if (!isSuperAdmin) return;
+    const updatedValue = Number(value) || 0;
+    try {
+      await axios.put(`${API_URL}/stock/${product.id}`, {
+        ...product,
+        [field]: updatedValue,
+        date: selectedDate
+      }, { withCredentials: true });
+      fetchProducts(selectedDate);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const saveStock = async (product) => {
-    if (!isSuperAdmin) return; // Non-admins can't save directly!
-
-    await axios.put(`${API_URL}/stock/${product.id}`, {
-      entree: Number(product.entree) || 0,
-      sold: Number(product.sold) || 0,
-      date: selectedDate,
-    });
-
-    fetchProducts(selectedDate);
-  };
-
-  const formatNumber = (value) => Number(value || 0).toLocaleString();
+  const formatRWF = (val) => Number(val).toLocaleString() + " RWF";
 
   return (
-    <div className="container mt-4">
-
-      {/* DASHBOARD */}
-      <div className="row g-4 mb-4">
-
-        <div className="col-md-3">
-          <div className="card shadow border-0 rounded-3" style={{background:"#0B3D2E",color:"#fff"}}>
-            <div className="card-body text-center">
-              <h6>Total Sales</h6>
-              <h4>RWF {formatNumber(totalEarned)}</h4>
-            </div>
-          </div>
+    <div className="premium-container">
+      
+      {/* STATS OVERVIEW */}
+      <div className="stats-row">
+        <div className="stats-card-premium card-sales">
+          <h6>Total Sales</h6>
+          <h4>{formatRWF(totals.earned)}</h4>
         </div>
-
-        <div className="col-md-3">
-          <div className="card shadow border-0 rounded-3" style={{background:"#D4AF37"}}>
-            <div className="card-body text-center">
-              <h6>Total Profit</h6>
-              <h4>RWF {formatNumber(totalProfit)}</h4>
-            </div>
-          </div>
+        <div className="stats-card-premium card-profit">
+          <h6>Net Profit</h6>
+          <h4>{formatRWF(totals.profit)}</h4>
         </div>
-
-        <div className="col-md-3">
-          <div className="card shadow border-0 rounded-3" style={{background:"#0E6251",color:"#fff"}}>
-            <div className="card-body text-center">
-              <h6>Total Stock Value</h6>
-              <h4>RWF {formatNumber(totalStockValue)}</h4>
-            </div>
-          </div>
+        <div className="stats-card-premium card-stock">
+          <h6>Stock Value</h6>
+          <h4>{formatRWF(totals.stockValue)}</h4>
         </div>
-
-        {/* LOW STOCK LINK */}
-        <div className="col-md-3">
-          <div
-            className="card shadow border-0 rounded-3"
-            style={{background:"#C0392B",color:"#fff",cursor:"pointer"}}
-            onClick={() => setShowLowStock(!showLowStock)}
-          >
-            <div className="card-body text-center">
-              <h6>Low Stock</h6>
-              <h4>{lowStockProducts.length}</h4>
-            </div>
-          </div>
+        <div className="stats-card-premium card-low" onClick={() => setShowLowStock(!showLowStock)} style={{cursor:'pointer'}}>
+          <h6>Low Stock</h6>
+          <h4>{totals.lowStockCount} Items</h4>
         </div>
-
       </div>
 
-
-      {/* HEADER */}
-      <div className="card shadow-lg mb-4 border-0">
-        <div className="card-body d-flex justify-content-between align-items-center">
-          <h4 className="fw-bold">Bar</h4>
-
-          <div className="d-flex align-items-center gap-2">
-
-            <button className="btn btn-outline-dark btn-sm" onClick={() => changeDate(-1)}>◀</button>
-
-            <strong>{selectedDate}</strong>
-
-            <button
-              className="btn btn-outline-dark btn-sm"
-              onClick={() => changeDate(1)}
-              disabled={selectedDate === today}
-            >
-              ▶
+      {/* CONTROLS */}
+      <div className="controls-card">
+        <h2 className="page-title">Bar Inventory</h2>
+        <div className="d-flex align-items-center gap-3">
+          <div className="date-controls">
+            <button className="btn-date" onClick={() => changeDate(-1)}><FaChevronLeft/></button>
+            <span className="fw-bold px-2">{selectedDate}</span>
+            <button className="btn-date" onClick={() => changeDate(1)} disabled={selectedDate === today}><FaChevronRight/></button>
+          </div>
+          {isSuperAdmin && (
+            <button className="btn-premium btn-add" onClick={handleOpenAdd}>
+              <FaPlus className="me-2"/> Add Product
             </button>
-
-            {isSuperAdmin && (
-              <button className="btn btn-success ms-3" onClick={handleAdd}>
-                + Add Product
-              </button>
-            )}
-
-          </div>
+          )}
         </div>
       </div>
 
-
-
-      {/* LOW STOCK TABLE */}
-      {showLowStock && (
-        <div className="card shadow-lg border-0 mb-4">
-          <div className="card-body">
-
-            <h5 className="fw-bold mb-3">Low Stock Products</h5>
-
-            <table className="table table-hover text-center">
-
-              <thead style={{background:"#1C1C1C",color:"#fff"}}>
-                <tr>
-                  <th>#</th>
-                  <th>Name</th>
-                  <th>Remaining</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {lowStockProducts.map((p,i)=>(
-                  <tr key={p.id} style={{background:"#ffe6e6"}}>
-                    <td>{i+1}</td>
-                    <td>{p.name}</td>
-                    <td>{p.closing_stock}</td>
-                  </tr>
-                ))}
-              </tbody>
-
-            </table>
-
-          </div>
-        </div>
-      )}
-
-
-
-      {/* MAIN BAR TABLE */}
-      <div className="card shadow-lg border-0 rounded-4">
-
+      {/* MAIN TABLE */}
+      <div className="premium-table-card">
         <div className="table-responsive">
-
-          <table
-            className="table table-hover text-center mb-0"
-            style={{borderCollapse:"separate",borderSpacing:"0 8px"}}
-          >
-
-            <thead style={{background:"#1C1C1C",color:"#fff"}}>
-
+          <table className="table premium-table text-center mb-0">
+            <thead>
               <tr>
-                <th>#</th>
                 <th>Product</th>
                 {isSuperAdmin && <th>Cost</th>}
                 <th>Selling</th>
                 <th>Opening</th>
-                <th>Stock In</th>
+                <th>In</th>
                 <th>Total</th>
                 <th>Sold</th>
                 <th>Closing</th>
-                <th>Sales</th>
+                <th>Revenue</th>
                 <th>Actions</th>
               </tr>
-
             </thead>
-
             <tbody>
-
               {loading ? (
-                <tr>
-                  <td colSpan="11">Loading...</td>
-                </tr>
+                <tr><td colSpan="11" className="py-5">Loading premium data...</td></tr>
               ) : products.length === 0 ? (
-                <tr>
-                  <td colSpan="11">No data</td>
-                </tr>
+                <tr><td colSpan="11" className="py-5 text-muted">No products found for this date</td></tr>
               ) : (
-                products.map((p,i)=>{
-
-                  const isLow = Number(p.closing_stock) < 5;
-
-                  return(
-                    <tr
-                      key={p.id}
-                      className="shadow-sm"
-                      style={{
-                        background:isLow ? "#ffcccc" : "#F9F9F9",
-                        borderRadius:"10px"
-                      }}
-                    >
-
-                      <td>{i+1}</td>
-
-                      <td className="fw-bold">{p.name}</td>
-
-                      {isSuperAdmin && <td>RWF {formatNumber(p.initial_price)}</td>}
-
-                      <td>RWF {formatNumber(p.price)}</td>
-
+                products.map((p) => {
+                  const isLow = p.closing_stock < 5;
+                  return (
+                    <tr key={p.id}>
+                      <td className="fw-bold">
+                        {p.name} {isLow && <FaExclamationTriangle className="text-danger ms-1" title="Low Stock"/>}
+                      </td>
+                      {isSuperAdmin && <td>{formatRWF(p.initial_price)}</td>}
+                      <td className="fw-semibold text-primary">{formatRWF(p.price)}</td>
                       <td>{p.opening_stock}</td>
-
-                      <td>
+                      <td style={{width:'100px'}}>
                         {isSuperAdmin ? (
-                          <input
-                            type="number"
-                            className="form-control form-control-sm text-center"
-                            value={p.entree || ""}
-                            onChange={(e)=>handleLocalChange(p.id,"entree",e.target.value)}
-                            onBlur={()=>saveStock(p)}
-                          />
-                        ) : (
-                          <span>{p.entree}</span>
-                        )}
+                          <input type="number" className="form-control form-control-sm premium-input text-center" 
+                            defaultValue={p.entree} onBlur={(e) => updateInstantStock(p, 'entree', e.target.value)} />
+                        ) : p.entree}
                       </td>
-
-                      <td>{p.total_stock}</td>
-
-                      <td>
+                      <td className="fw-bold">{p.total_stock}</td>
+                      <td style={{width:'100px'}}>
                         {isSuperAdmin ? (
-                          <input
-                            type="number"
-                            className="form-control form-control-sm text-center"
-                            value={p.sold || ""}
-                            onChange={(e)=>handleLocalChange(p.id,"sold",e.target.value)}
-                            onBlur={()=>saveStock(p)}
-                          />
-                        ) : (
-                          <span>{p.sold}</span>
-                        )}
+                          <input type="number" className="form-control form-control-sm premium-input text-center" 
+                            defaultValue={p.sold} onBlur={(e) => updateInstantStock(p, 'sold', e.target.value)} />
+                        ) : p.sold}
                       </td>
-
-                      <td className="fw-bold">{p.closing_stock}</td>
-
-                      <td className="text-success fw-bold">
-                        RWF {formatNumber(p.total_sold)}
-                      </td>
-
+                      <td className={`fw-bold ${isLow ? 'text-danger' : ''}`}>{p.closing_stock}</td>
+                      <td className="text-success fw-bold">{formatRWF(p.total_sold)}</td>
                       <td>
-                        <button
-                          className="btn btn-warning btn-sm"
-                          onClick={()=>handleEdit(p)}
-                        >
-                          {isSuperAdmin ? "Edit" : "Request Change"}
-                        </button>
+                        <div className="d-flex justify-content-center gap-2">
+                          <button className="btn-premium btn-edit btn-sm" onClick={() => handleOpenEdit(p)}>
+                            <FaEdit/>
+                          </button>
+                          {isSuperAdmin && (
+                            <button className="btn-premium btn-delete btn-sm" onClick={() => handleDelete(p.id)}>
+                              <FaTrash/>
+                            </button>
+                          )}
+                        </div>
                       </td>
-
                     </tr>
                   )
-
                 })
               )}
-
             </tbody>
-
           </table>
-
         </div>
-
       </div>
 
-      {/* REQUEST CHANGE MODAL */}
-      {showRequestModal && requestItem && (
-        <>
-          <div className="modal-backdrop fade show"></div>
-          <div className="modal fade show d-block" tabIndex="-1">
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content">
-                <div className="modal-header bg-warning text-dark">
-                  <h5 className="modal-title fw-bold">Request Data Change</h5>
+      {/* ADD/EDIT MODAL */}
+      {showAddModal && (
+        <div className="modal fade show d-block" style={{background:'rgba(0,0,0,0.6)'}}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0" style={{borderRadius:'20px'}}>
+              <form onSubmit={handleSubmit}>
+                <div className="modal-header border-0 pb-0">
+                  <h5 className="fw-bold">{editingProduct ? "Edit Product" : "New Bar Product"}</h5>
+                  <button type="button" className="btn-close" onClick={() => setShowAddModal(false)}></button>
+                </div>
+                <div className="modal-body">
+                  <div className="mb-3">
+                    <label className="form-label fw-bold">Name</label>
+                    <input type="text" className="form-control premium-input" required 
+                      value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                  </div>
+                  <div className="row g-3 mb-3">
+                    <div className="col-6">
+                      <label className="form-label fw-bold">Cost (RWF)</label>
+                      <input type="number" className="form-control premium-input" required 
+                        value={formData.initial_price} onChange={e => setFormData({...formData, initial_price: e.target.value})} />
+                    </div>
+                    <div className="col-6">
+                      <label className="form-label fw-bold">Selling (RWF)</label>
+                      <input type="number" className="form-control premium-input" required 
+                        value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} />
+                    </div>
+                  </div>
+                  <div className="row g-3">
+                    <div className="col-4">
+                      <label className="form-label fw-bold">Opening</label>
+                      <input type="number" className="form-control premium-input" required 
+                        value={formData.opening_stock} onChange={e => setFormData({...formData, opening_stock: e.target.value})} />
+                    </div>
+                    <div className="col-4">
+                      <label className="form-label fw-bold">Stock In</label>
+                      <input type="number" className="form-control premium-input" 
+                        value={formData.entree} onChange={e => setFormData({...formData, entree: e.target.value})} />
+                    </div>
+                    <div className="col-4">
+                      <label className="form-label fw-bold">Sold</label>
+                      <input type="number" className="form-control premium-input" 
+                        value={formData.sold} onChange={e => setFormData({...formData, sold: e.target.value})} />
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer border-0 pt-0">
+                  <button type="submit" className="btn-premium btn-add w-100 py-3 mt-2">
+                    {editingProduct ? "Save Changes" : "Create Product"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REQUEST MODAL */}
+      {showRequestModal && (
+        <div className="modal fade show d-block" style={{background:'rgba(0,0,0,0.6)'}}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0" style={{borderRadius:'20px'}}>
+              <form onSubmit={submitEditRequest}>
+                <div className="modal-header border-0 pb-0">
+                  <h5 className="fw-bold">Request Change</h5>
                   <button type="button" className="btn-close" onClick={() => setShowRequestModal(false)}></button>
                 </div>
                 <div className="modal-body">
-                  <p className="text-muted mb-4">
-                    Direct edits are locked for standard staff. State the correct number of items sold and note the reason (e.g., miscounted). 
-                    A Super Admin will review this request.
-                  </p>
-                  <form onSubmit={submitEditRequest}>
-                    <div className="mb-3">
-                      <label className="fw-bold">Product</label>
-                      <input type="text" className="form-control" value={requestItem.name} readOnly disabled />
-                    </div>
-                    <div className="mb-3">
-                      <label className="fw-bold">Currently Saved "Sold" Target</label>
-                      <input type="text" className="form-control" value={requestItem.sold} readOnly disabled />
-                    </div>
-                    <div className="mb-3">
-                      <label className="fw-bold text-danger">New Correct "Sold" Target</label>
-                      <input 
-                        type="number" 
-                        className="form-control" 
-                        required 
-                        value={requestData.new_sold} 
-                        onChange={(e) => setRequestData({...requestData, new_sold: e.target.value})} 
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label className="fw-bold">Reason for Change (Required)</label>
-                      <textarea 
-                        className="form-control" 
-                        rows="3" 
-                        placeholder="I accidentally counted 12 but it was actually 10..."
-                        required
-                        value={requestData.reason}
-                        onChange={(e) => setRequestData({...requestData, reason: e.target.value})}
-                      ></textarea>
-                    </div>
-                    <div className="d-flex justify-content-end gap-2 mt-4">
-                      <button type="button" className="btn btn-secondary" onClick={() => setShowRequestModal(false)}>Cancel</button>
-                      <button type="submit" className="btn btn-danger text-light">Submit Request</button>
-                    </div>
-                  </form>
+                  <div className="mb-3">
+                    <label className="form-label fw-bold">Product</label>
+                    <input type="text" className="form-control" value={requestItem?.name} disabled />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label fw-bold text-danger">Correct Sold Quantity</label>
+                    <input type="number" className="form-control premium-input" required
+                      value={requestData.new_sold} onChange={e => setRequestData({...requestData, new_sold: e.target.value})} />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label fw-bold">Reason</label>
+                    <textarea className="form-control premium-input" rows="3" required
+                      value={requestData.reason} onChange={e => setRequestData({...requestData, reason: e.target.value})}></textarea>
+                  </div>
                 </div>
-              </div>
+                <div className="modal-footer border-0 pt-0">
+                  <button type="submit" className="btn-premium btn-add w-100 py-3 mt-2">Submit Request</button>
+                </div>
+              </form>
             </div>
           </div>
-        </>
+        </div>
       )}
 
     </div>

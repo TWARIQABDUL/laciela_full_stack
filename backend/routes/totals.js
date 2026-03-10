@@ -23,37 +23,37 @@ router.get("/total-money", authenticateUser, async (req, res) => {
     const [drinksResult] = await dbPromise.query(
       `SELECT SUM(sold * price) AS total FROM bar_products${branchFilter}`, params
     );
-    const drinks = drinksResult[0].total || 0;
+    const drinks = Number(drinksResult[0].total || 0);
 
     // Kitchen total
     const [kitchenResult] = await dbPromise.query(
       `SELECT SUM(sold * price) AS total FROM kitchen_products${branchFilter}`, params
     );
-    const kitchen = kitchenResult[0].total || 0;
+    const kitchen = Number(kitchenResult[0].total || 0);
 
     // Billiard total
     const [billiardResult] = await dbPromise.query(
       `SELECT SUM(cash + cash_momo + token) AS total FROM billiard${branchFilter}`, params
     );
-    const billiard = billiardResult[0].total || 0;
+    const billiard = Number(billiardResult[0].total || 0);
 
     // Gym total
     const [gymResult] = await dbPromise.query(
       `SELECT SUM(cash + cash_momo) AS total FROM gym${branchFilter}`, params
     );
-    const gym = gymResult[0].total || 0;
+    const gym = Number(gymResult[0].total || 0);
 
     // Guesthouse total
     const [guesthouseResult] = await dbPromise.query(
       `SELECT SUM((vip * vip_price) + (normal * normal_price)) AS total FROM guesthouse${branchFilter}`, params
     );
-    const guesthouse = guesthouseResult[0].total || 0;
+    const guesthouse = Number(guesthouseResult[0].total || 0);
 
     // Expenses total
     const [expensesResult] = await dbPromise.query(
       `SELECT SUM(amount) AS total FROM expenses${branchFilter}`, params
     );
-    const expenses = expensesResult[0].total || 0;
+    const expenses = Number(expensesResult[0].total || 0);
 
     // Send JSON response
     res.json({

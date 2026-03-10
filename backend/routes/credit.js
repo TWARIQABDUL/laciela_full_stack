@@ -4,26 +4,28 @@ const db = require("../db");
 const authenticateUser = require("../middleware/auth");
 
 // ==========================================
-// GET ALL EMPLOYEES (from users table)
+// GET ALL EMPLOYEES / USERS
 // ==========================================
 router.get("/", authenticateUser, (req, res) => {
   const userRole = req.user.role;
   const userBranchId = req.user.branchId;
 
   let sql = `
-    SELECT userId as id, username as name, role, payment, branch_id 
-    FROM users 
-    ORDER BY created_at DESC
+    SELECT u.userId as id, u.username as name, u.role, u.payment, u.branch_id, b.branchName as branch_name
+    FROM users u
+    LEFT JOIN branch b ON u.branch_id = b.id
+    ORDER BY u.created_at DESC
   `;
   let params = [];
 
   // If not SUPER_ADMIN, strictly filter by branch_id
   if (userRole !== "SUPER_ADMIN") {
     sql = `
-      SELECT userId as id, username as name, role, payment, branch_id 
-      FROM users 
-      WHERE branch_id = ?
-      ORDER BY created_at DESC
+      SELECT u.userId as id, u.username as name, u.role, u.payment, u.branch_id, b.branchName as branch_name
+      FROM users u
+      LEFT JOIN branch b ON u.branch_id = b.id
+      WHERE u.branch_id = ?
+      ORDER BY u.created_at DESC
     `;
     params = [userBranchId];
   }
@@ -35,37 +37,45 @@ router.get("/", authenticateUser, (req, res) => {
 });
 
 // ==========================================
-// ADD NEW EMPLOYEE (into users table)
+// ADD NEW USER / STAFF
 // ==========================================
 router.post("/", authenticateUser, (req, res) => {
-  const { name, payment } = req.body;
-  const userRole = req.user.role;
-  const userBranchId = req.user.branchId;
+  const { username, password, role, branch_id, payment } = req.body;
+  const currentUserRole = req.user.role;
+  const currentUserBranchId = req.user.branchId;
 
   // Security: Managers cannot add staff natively.
-  if (userRole === "MANAGER") {
+  if (currentUserRole === "MANAGER") {
     return res.status(403).json({ error: "Managers cannot add staff." });
   }
 
-  if (!name || !name.trim()) return res.status(400).json({ error: "Name is required" });
-  if (payment === undefined || isNaN(Number(payment))) return res.status(400).json({ error: "Payment must be a valid number" });
-
-  // Add into users table. Password is a required field, so we just set a default which they can't use to login anyway due to role block.
-  const sql = "INSERT INTO users (username, password, role, branch_id, status, payment) VALUES (?, ?, 'EMPLOYEE', ?, 'active', ?)";
+  if (!username || !username.trim()) return res.status(400).json({ error: "Username is required" });
   
-  db.query(sql, [name.trim(), 'employee_no_login_pw', userBranchId, Number(payment)], (err, result) => {
+  // Basic validation
+  const finalRole = role || 'EMPLOYEE';
+  const finalBranchId = (currentUserRole === 'SUPER_ADMIN') ? (branch_id || null) : currentUserBranchId;
+  const finalPassword = password || '123456'; // Default password if none provided
+  const finalPayment = Number(payment) || 0;
+
+  const sql = "INSERT INTO users (username, password, role, branch_id, status, payment) VALUES (?, ?, ?, ?, 'active', ?)";
+  
+  db.query(sql, [username.trim(), finalPassword, finalRole, finalBranchId, finalPayment], (err, result) => {
     if (err) {
-      console.error("INSERT EMPLOYEE ERROR:", err);
-      // Handle Unique Constraint on username
+      console.error("INSERT USER ERROR:", err);
       if (err.code === 'ER_DUP_ENTRY') {
-         return res.status(400).json({ error: "An employee or user with this name already exists." });
+         return res.status(400).json({ error: "A user with this name already exists." });
       }
-      return res.status(500).json({ error: "Failed to add employee" });
+      return res.status(500).json({ error: "Failed to add user" });
     }
 
-    // Return the newly inserted employee formatted like GET
-    db.query("SELECT userId as id, username as name, payment, branch_id FROM users WHERE userId=?", [result.insertId], (err2, rows) => {
-      if (err2) return res.status(500).json({ error: "Failed to fetch new employee" });
+    // Return the newly inserted user
+    db.query(`
+      SELECT u.userId as id, u.username as name, u.role, u.payment, u.branch_id, b.branchName as branch_name
+      FROM users u
+      LEFT JOIN branch b ON u.branch_id = b.id
+      WHERE u.userId = ?
+    `, [result.insertId], (err2, rows) => {
+      if (err2) return res.status(500).json({ error: "Failed to fetch new user" });
       res.json(rows[0]);
     });
   });
@@ -95,7 +105,6 @@ router.post("/:id/loans", authenticateUser, (req, res) => {
   if (!loan_date) return res.status(400).json({ error: "Date is required" });
 
   const sql = "INSERT INTO employee_loans (employee_id, amount, reason, loan_date, remaining, branch_id) VALUES (?, ?, ?, ?, ?, ?)";
-  // initially remaining = amount (since they borrow it, they have to pay back, so remaining to pay back is amount)
   db.query(sql, [id, Number(amount), reason || '', loan_date, Number(amount), userBranchId], (err, result) => {
     if (err) {
       console.error("INSERT LOAN ERROR:", err);

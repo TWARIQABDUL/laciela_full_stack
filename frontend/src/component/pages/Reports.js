@@ -1,34 +1,32 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useState, useContext, useCallback } from "react";
 import axios from "axios";
 import { AuthContext } from "../../context/AuthContext";
+import { FaChartLine, FaArrowUp, FaArrowDown, FaExchangeAlt, FaFilter, FaExclamationTriangle } from "react-icons/fa";
+import "../../style/premium-pages.css";
 
 function Reports() {
-  const { user } = useContext(AuthContext);
+  const { user, isAuthenticated } = useContext(AuthContext);
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedBranch, setSelectedBranch] = useState("ALL");
   const [branches, setBranches] = useState([]);
 
-  // Fetch branches for the dropdown
-  useEffect(() => {
-    if (user?.role === "SUPER_ADMIN") {
-      axios.get(`${process.env.REACT_APP_API_BASE_URL}/reports/branches`, { withCredentials: true })
-        .then(res => setBranches(res.data.branches || []))
-        .catch(err => console.error("Error fetching branches:", err));
-    } else if (user?.branchId) {
-      setSelectedBranch(user.branchId); // Admins are locked to their own branch
+  const API_URL = process.env.REACT_APP_API_BASE_URL;
+
+  const fetchBranches = useCallback(async () => {
+    if (user?.role !== "SUPER_ADMIN") return;
+    try {
+      const res = await axios.get(`${API_URL}/reports/branches`, { withCredentials: true });
+      setBranches(res.data.branches || []);
+    } catch (err) {
+      console.error("Error fetching branches:", err);
     }
-  }, [user]);
+  }, [user, API_URL]);
 
-  // Fetch Report Data whenever the branch selection changes
-  useEffect(() => {
-    fetchReportData(selectedBranch);
-  }, [selectedBranch]);
-
-  const fetchReportData = async (branchId) => {
+  const fetchReportData = useCallback(async (branchId) => {
     try {
       setLoading(true);
-      const res = await axios.get(`${process.env.REACT_APP_API_BASE_URL}/reports/performance?branch_id=${branchId}`, {
+      const res = await axios.get(`${API_URL}/reports/performance?branch_id=${branchId}`, {
         withCredentials: true
       });
       setReportData(res.data);
@@ -38,21 +36,35 @@ function Reports() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL]);
 
-  const formatCurrency = (val) => {
-    return Number(val || 0).toLocaleString() + " RWF";
-  };
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchBranches();
+      if (user.role !== "SUPER_ADMIN" && user.branchId) {
+        setSelectedBranch(user.branchId);
+      }
+    }
+  }, [isAuthenticated, user, fetchBranches]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchReportData(selectedBranch);
+    }
+  }, [selectedBranch, isAuthenticated, fetchReportData]);
+
+  const formatCurrency = (val) => Number(val || 0).toLocaleString() + " RWF";
 
   const getDeptColor = (dept) => {
-    switch (dept) {
-      case "bar_products": return "primary";
-      case "kitchen_products": return "warning";
-      case "guesthouse": return "info";
-      case "gym": return "success";
-      case "billiard": return "secondary";
-      default: return "dark";
-    }
+    const map = {
+      "bar_products": "#3b82f6",
+      "kitchen_products": "#f59e0b",
+      "guesthouse": "#06b6d4",
+      "gym": "#10b981",
+      "billiard": "#8b5cf6",
+      "management": "#64748b"
+    };
+    return map[dept] || "#1e293b";
   };
 
   const formatDeptName = (dept) => {
@@ -63,133 +75,128 @@ function Reports() {
       "gym": "Gym Facility",
       "billiard": "Billiard",
       "management": "Management",
-      "Other": "Other"
     };
     return names[dept] || dept;
   };
 
-  if (loading && !reportData) {
-    return <div className="text-center mt-5"><h4>Loading Performance Reports...</h4></div>;
-  }
-
   return (
-    <div className="container mt-4">
-      {/* Header & Controls */}
-      <div className="card shadow-lg mb-4 border-0" style={{ borderRadius: "15px" }}>
-        <div className="card-body d-flex flex-column flex-md-row justify-content-between align-items-center">
-          <h4 className="fw-bold mb-3 mb-md-0" style={{ color: "#1C1C1C" }}>
-            <i className="bi bi-graph-up-arrow me-2 text-primary"></i>
-            Business Performance & Loss Report
-          </h4>
-          
-          {user?.role === "SUPER_ADMIN" && (
-            <div className="d-flex align-items-center">
-              <label className="fw-bold me-2 text-muted">Filter by Branch:</label>
-              <select 
-                className="form-select shadow-sm"
-                value={selectedBranch}
-                onChange={(e) => setSelectedBranch(e.target.value)}
-                style={{ width: "200px", borderRadius: "8px" }}
-              >
-                <option value="ALL">Global (All Branches)</option>
-                {branches.map(b => (
-                  <option key={b.id} value={b.branch_id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
+    <div className="premium-container">
+      
+      {/* HEADER SECTION */}
+      <div className="controls-card">
+        <div className="d-flex align-items-center">
+          <div className="p-3 rounded-circle me-3" style={{background: 'rgba(59, 130, 246, 0.1)', color:'#3b82f6'}}>
+            <FaChartLine size={24}/>
+          </div>
+          <div>
+            <h2 className="page-title">Performance Analytics</h2>
+            <p className="text-muted mb-0 small text-uppercase fw-bold tracking-wider">Business Impact & Loss Recovery Report</p>
+          </div>
         </div>
+
+        {user?.role === "SUPER_ADMIN" && (
+          <div className="date-controls" style={{background: 'white', border: '1px solid #e2e8f0'}}>
+            <FaFilter className="text-muted me-2"/>
+            <select 
+              className="form-select border-0 shadow-none fw-bold"
+              style={{ width: "220px", background:'transparent', fontSize:'0.9rem' }}
+              value={selectedBranch}
+              onChange={(e) => setSelectedBranch(e.target.value)}
+            >
+              <option value="ALL">Global Network</option>
+              {branches.map(b => (
+                <option key={b.branch_id} value={b.branch_id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
-      {reportData ? (
+      {loading && !reportData ? (
+        <div className="text-center py-5">
+          <div className="spinner-border text-primary mb-3"></div>
+          <p className="text-muted">Generating premium insights...</p>
+        </div>
+      ) : reportData ? (
         <>
-          {/* KPI Summary Cards */}
-          <div className="row g-4 mb-4">
-            {/* Income */}
-            <div className="col-md-4">
-              <div className="card shadow-sm border-0 h-100" style={{ borderRadius: "15px", borderLeft: "5px solid #28a745" }}>
-                <div className="card-body text-center">
-                  <h6 className="text-muted text-uppercase fw-bold mb-2">Total Gross Income</h6>
-                  <h3 className="fw-bold text-success mb-0">{formatCurrency(reportData.summary?.total_income)}</h3>
-                </div>
+          {/* KPI DASHBOARD */}
+          <div className="stats-row">
+            <div className="stats-card-premium" style={{background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color:'white'}}>
+              <div className="d-flex w-100 justify-content-between align-items-start mb-3">
+                <h6 className="opacity-75">Gross Revenue</h6>
+                <FaArrowUp className="text-success"/>
               </div>
-            </div>
-            
-            {/* Business Loss */}
-            <div className="col-md-4">
-              <div className="card shadow-sm border-0 h-100" style={{ borderRadius: "15px", borderLeft: "5px solid #dc3545" }}>
-                <div className="card-body text-center">
-                  <h6 className="text-muted text-uppercase fw-bold mb-2">Business Loss (Missing Stock)</h6>
-                  <h3 className="fw-bold text-danger mb-0">{formatCurrency(reportData.summary?.business_loss)}</h3>
-                  <small className="text-muted d-block mt-1">From Approved Requests</small>
-                </div>
+              <h4 className="w-100 text-start">{formatCurrency(reportData.summary?.total_income)}</h4>
+              <div className="progress w-100 mt-3" style={{height:'4px', background:'rgba(255,255,255,0.1)'}}>
+                <div className="progress-bar bg-success" style={{width: '85%'}}></div>
               </div>
             </div>
 
-            {/* Recovered Loss */}
-            <div className="col-md-4">
-              <div className="card shadow-sm border-0 h-100" style={{ borderRadius: "15px", borderLeft: "5px solid #17a2b8" }}>
-                <div className="card-body text-center">
-                  <h6 className="text-muted text-uppercase fw-bold mb-2">Recovered Loss (Penalties)</h6>
-                  <h3 className="fw-bold text-info mb-0">{formatCurrency(reportData.summary?.recovered_loss)}</h3>
-                  <small className="text-muted d-block mt-1">Deducted from Staff Salaries</small>
-                </div>
+            <div className="stats-card-premium" style={{background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)', color:'white'}}>
+              <div className="d-flex w-100 justify-content-between align-items-start mb-3">
+                <h6 className="opacity-75">Business Loss</h6>
+                <FaArrowDown className="text-white opacity-50"/>
               </div>
+              <h4 className="w-100 text-start">{formatCurrency(reportData.summary?.business_loss)}</h4>
+              <p className="w-100 text-start small mb-0 mt-2 opacity-75">Stock discrepancies & errors</p>
+            </div>
+
+            <div className="stats-card-premium" style={{background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color:'white'}}>
+              <div className="d-flex w-100 justify-content-between align-items-start mb-3">
+                <h6 className="opacity-75">Recovered Loss</h6>
+                <FaExchangeAlt/>
+              </div>
+              <h4 className="w-100 text-start">{formatCurrency(reportData.summary?.recovered_loss)}</h4>
+              <p className="w-100 text-start small mb-0 mt-2 opacity-75">Staff-compensated penalties</p>
             </div>
           </div>
 
-          {/* Department Breakdown Table */}
-          <div className="card shadow-lg border-0" style={{ borderRadius: "15px", overflow: "hidden" }}>
-            <div className="card-header bg-white pt-4 pb-3 border-bottom-0">
-              <h5 className="fw-bold mb-0">Departmental Breakdown</h5>
+          {/* DEPARTMENT BREAKDOWN */}
+          <div className="premium-table-card">
+            <div className="p-4 border-bottom d-flex justify-content-between align-items-center">
+              <h5 className="fw-bold mb-0">Departmental Intelligence</h5>
+              <span className="badge bg-light text-dark px-3 py-2 rounded-pill shadow-sm">Real-time Data</span>
             </div>
             <div className="table-responsive">
-              <table className="table table-hover align-middle mb-0 text-center">
-                <thead style={{ backgroundColor: "#1C1C1C", color: "#fff" }}>
+              <table className="table premium-table mb-0">
+                <thead>
                   <tr>
-                    <th className="text-start px-4">Department</th>
-                    <th>Gross Income</th>
-                    <th>Business Loss</th>
-                    <th>Recovered Loss</th>
-                    <th>Net Impact Ratio</th>
+                    <th className="text-start ps-4">Department</th>
+                    <th>Revenue Stream</th>
+                    <th>Theoretical Loss</th>
+                    <th>Recovery Value</th>
+                    <th>Net Recovery %</th>
                   </tr>
                 </thead>
                 <tbody>
                   {reportData.departments?.map((dept, i) => {
                     const totalLoss = dept.business_loss + dept.recovered_loss;
-                    // Calculate what percentage of total loss was recovered
                     const recoveryRatio = totalLoss > 0 ? (dept.recovered_loss / totalLoss) * 100 : 0;
                     
                     return (
-                      <tr key={i} style={{ backgroundColor: i % 2 === 0 ? "#F8F9FA" : "#FFFFFF" }}>
-                        <td className="text-start px-4 fw-bold">
-                          <span className={`badge bg-${getDeptColor(dept.department)} me-2 px-3 py-2`}>
-                            {formatDeptName(dept.department)}
-                          </span>
+                      <tr key={i}>
+                        <td className="text-start ps-4">
+                          <div className="d-flex align-items-center">
+                            <div className="rounded-2 me-3" style={{width:'8px', height:'24px', background: getDeptColor(dept.department)}}></div>
+                            <span className="fw-bold">{formatDeptName(dept.department)}</span>
+                          </div>
                         </td>
-                        <td className="fw-semibold text-success">{formatCurrency(dept.income)}</td>
-                        <td className="text-danger fw-semibold">{formatCurrency(dept.business_loss)}</td>
-                        <td className="text-info fw-semibold">{formatCurrency(dept.recovered_loss)}</td>
+                        <td className="fw-bold text-success">{formatCurrency(dept.income)}</td>
+                        <td className="fw-bold text-danger">{formatCurrency(dept.business_loss)}</td>
+                        <td className="fw-bold text-info">{formatCurrency(dept.recovered_loss)}</td>
                         <td>
                           {totalLoss > 0 ? (
-                            <div className="progress mx-auto shadow-sm" style={{ height: "20px", width: "120px", borderRadius: "10px" }}>
-                              <div 
-                                className="progress-bar bg-info" 
-                                role="progressbar" 
-                                style={{ width: `${recoveryRatio}%` }} 
-                                title={`Recovered: ${recoveryRatio.toFixed(1)}%`}
-                              >
-                                {recoveryRatio > 20 ? `${Math.round(recoveryRatio)}% Rec` : ''}
+                            <div className="d-flex align-items-center justify-content-center">
+                              <div className="progress flex-grow-1 mx-3" style={{ height: "8px", borderRadius: "10px", maxWidth:'100px' }}>
+                                <div 
+                                  className="progress-bar" 
+                                  style={{ width: `${recoveryRatio}%`, background: '#10b981' }} 
+                                ></div>
                               </div>
-                              <div 
-                                className="progress-bar bg-danger" 
-                                role="progressbar" 
-                                style={{ width: `${100 - recoveryRatio}%` }} 
-                                title={`Lost: ${(100 - recoveryRatio).toFixed(1)}%`}
-                              ></div>
+                              <span className="fw-bold small">{Math.round(recoveryRatio)}%</span>
                             </div>
                           ) : (
-                            <span className="text-muted"><i className="bi bi-check-circle-fill text-success"></i> No Losses</span>
+                            <span className="badge bg-success-soft text-success rounded-pill px-3">Stable</span>
                           )}
                         </td>
                       </tr>
@@ -201,10 +208,19 @@ function Reports() {
           </div>
         </>
       ) : (
-        <div className="alert alert-warning shadow-sm border-0" style={{ borderRadius: "10px" }}>
-          No performance data available for the selected criteria.
+        <div className="controls-card justify-content-center text-center py-5">
+           <div>
+             <FaExclamationTriangle size={40} className="text-warning mb-3"/>
+             <h5 className="fw-bold">No data found for this period</h5>
+             <p className="text-muted">Try selecting a different branch or check if stock has been entered.</p>
+           </div>
         </div>
       )}
+
+      <style>{`
+        .bg-success-soft { background-color: rgba(16, 185, 129, 0.1); }
+        .tracking-wider { letter-spacing: 0.1em; }
+      `}</style>
     </div>
   );
 }

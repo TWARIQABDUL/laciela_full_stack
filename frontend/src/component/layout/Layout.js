@@ -1,41 +1,85 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useContext } from "react";
+import Navbar from "../include/Navbar";
+import Sidebar from "./Sidebar";
+import { AuthContext } from "../../context/AuthContext";
+import { Outlet } from "react-router-dom";
 
-function Layout({ children }) {
+export default function Layout() {
+  const { isAuthenticated } = useContext(AuthContext);
+
   return (
-    <div style={styles.wrapper}>
+    <div className="app-layout" style={styles.wrapper}>
       
-      {/* ===== SIDEBAR ===== */}
-      <div style={styles.sidebar}>
-        <div style={styles.logoSection}>
-          <h4 style={styles.logo}>La Cielo</h4>
-          <small style={{ color: "#d4d4d4" }}>Garden</small>
-        </div>
+      {/* Sidebar only shows for authenticated users on desktop (handled via Sidebar.css media queries) */}
+      {isAuthenticated && <Sidebar />}
 
-        <ul style={styles.menu}>
-          <li><Link style={styles.link} to="/">Dashboard</Link></li>
-          <li><Link style={styles.link} to="/Bar">Sales</Link></li>
-          <li><Link style={styles.link} to="/Stock">Stock</Link></li>
-          <li><Link style={styles.link} to="/Expenses">Expenses</Link></li>
-          <li><Link style={styles.link} to="/Reports">Reports</Link></li>
-          <li><Link style={styles.link} to="/Settings">Settings</Link></li>
-        </ul>
-      </div>
-
-      {/* ===== MAIN CONTENT ===== */}
-      <div style={styles.main}>
+      <div className="main-viewport" style={styles.main}>
         
-        {/* Top Header */}
-        <div style={styles.topbar}>
-          <h5 style={{ margin: 0 }}>BAR MANAGEMENT SYSTEM</h5>
-        </div>
+        {/* Top Navbar */}
+        <Navbar />
 
-        {/* Page Content */}
-        <div style={styles.content}>
-          {children}
-        </div>
+        {/* Page Content Area */}
+        <main className="page-main-content" style={styles.content}>
+          <div className="content-container">
+            <Outlet />
+          </div>
+        </main>
 
       </div>
+
+      <style>{`
+        .app-layout {
+          display: flex;
+          height: 100vh;
+          overflow: hidden;
+          background-color: #f8fafc;
+        }
+
+        .main-viewport {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          height: 100vh;
+          overflow: hidden;
+          position: relative;
+        }
+
+        .page-main-content {
+          flex: 1;
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding: 24px;
+          background: #f1f5f9;
+        }
+
+        .content-container {
+          max-width: 1400px;
+          margin: 0 auto;
+          width: 100%;
+        }
+
+        /* Responsive Overrides */
+        @media (max-width: 768px) {
+          .page-main-content {
+            padding: 16px;
+          }
+        }
+
+        /* Fix for scrollbar aesthetics */
+        .page-main-content::-webkit-scrollbar {
+          width: 6px;
+        }
+        .page-main-content::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .page-main-content::-webkit-scrollbar-thumb {
+          background: rgba(0,0,0,0.1);
+          border-radius: 10px;
+        }
+        .page-main-content::-webkit-scrollbar-thumb:hover {
+          background: rgba(0,0,0,0.2);
+        }
+      `}</style>
     </div>
   );
 }
@@ -44,60 +88,17 @@ const styles = {
   wrapper: {
     display: "flex",
     height: "100vh",
-    backgroundColor: "#f4f6f9"
+    width: "100%",
   },
-
-  sidebar: {
-    width: "240px",
-    background: "linear-gradient(180deg, #0f5132, #14532d)",
-    color: "white",
-    padding: "20px",
-    display: "flex",
-    flexDirection: "column"
-  },
-
-  logoSection: {
-    marginBottom: "30px",
-    textAlign: "center"
-  },
-
-  logo: {
-    margin: 0,
-    fontWeight: "bold"
-  },
-
-  menu: {
-    listStyle: "none",
-    padding: 0
-  },
-
-  link: {
-    display: "block",
-    padding: "12px 10px",
-    marginBottom: "10px",
-    borderRadius: "6px",
-    textDecoration: "none",
-    color: "white",
-    backgroundColor: "transparent"
-  },
-
   main: {
     flex: 1,
     display: "flex",
-    flexDirection: "column"
+    flexDirection: "column",
+    height: "100vh",
+    minWidth: 0, // Critical for flex children with overflow
   },
-
-  topbar: {
-    backgroundColor: "#1b4332",
-    color: "white",
-    padding: "15px 25px",
-    boxShadow: "0 2px 5px rgba(0,0,0,0.1)"
-  },
-
   content: {
-    padding: "25px",
-    overflowY: "auto"
+    flex: 1,
+    overflowY: "auto",
   }
 };
-
-export default Layout;
